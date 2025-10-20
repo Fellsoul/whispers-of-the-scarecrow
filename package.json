@@ -1,0 +1,36 @@
+{
+  "name": "lanternmare",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "eslint:fix": "eslint --fix",
+    "prettier:write": "prettier . --write",
+    "prettier:check": "prettier . --check",
+    "prepare": "husky"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/dotenv-webpack": "^7.0.8",
+    "acorn": "^8.15.0",
+    "dotenv-webpack": "^8.1.1",
+    "eslint": "^9.37.0",
+    "husky": "^9.1.7",
+    "i18next": "^25.6.0",
+    "lint-staged": "^16.2.4",
+    "prettier": "^3.6.2",
+    "terser-webpack-plugin": "^5.3.14",
+    "ts-loader": "^9.5.4",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.1",
+    "webpack": "^5.102.1",
+    "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "@dao3fun/component": "^3.3.1"
+  }
+}
