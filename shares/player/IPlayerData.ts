@@ -26,4 +26,16 @@ export interface IPlayerData {
 
   /** VIP等级 / VIP level */
   vipLevel: number;
+
+  /** 角色熟悉度 / Character familiarity (角色ID -> 熟悉度值) */
+  characterFamiliarity?: Record<string, number>;
+
+  /** 比赛场次 / Match count (用于书本条件显示) */
+  matchCount?: number;
+
+  /** 已获得的成就ID列表 / Achievements (用于书本条件显示) */
+  achievements?: string[];
+
+  /** 自定义数据 / Custom data (用于书本条件显示) */
+  customData?: Record<string, unknown>;
 }

@@ -1,0 +1,152 @@
+{
+  "locale": "zh-CN",
+  "version": 2,
+  "settingsRef": "BOOK_SETTINGS_V1",
+
+  "pages": [
+    {
+      "pageNumber": "welcome",
+      "pageDisplayNumber": "Ⅰ",
+      "template": "textTop",
+      "overrides": {
+        "box": { "widthRef": "PAGE_CONTENT_W", "heightRef": "PAGE_CONTENT_H" }
+      },
+      "visibility": {
+        "chapterTitle": true,
+        "chapterSeparator": true,
+        "subTitle": false,
+        "subTitleSeparator": false
+      },
+      "lines": [
+        {
+          "type": "Title",
+          "text": "欢迎",
+          "styleRef": "TITLE",
+          "layout": {
+            "maxWidthRef": "TEXT_MAX_W",
+            "lineHeightRef": "LH_TITLE",
+            "marginTopRef": "MT_TITLE"
+          }
+        },
+        {
+          "type": "Separator",
+          "styleRef": "SEP_ORNATE",
+          "layout": { "heightRef": "SEP_H", "marginTopRef": "GAP_AFTER_TITLE" }
+        },
+        {
+          "type": "Paragraph",
+          "i18n": "pages.welcome.blurb",
+          "fallbackText": "今夜月升前，先学会点亮你的第一盏南瓜灯。",
+          "styleRef": "BODY",
+          "layout": {
+            "maxWidthRef": "TEXT_MAX_W",
+            "lineHeightRef": "LH_BODY",
+            "marginTopRef": "GAP_AFTER_SEP"
+          }
+        },
+        {
+          "type": "Paragraph",
+          "i18n": "pages.welcome.blurb",
+          "fallbackText": "今夜月升前，先学会点亮你的第一盏南瓜灯。",
+          "styleRef": "BODY",
+          "layout": {
+            "maxWidthRef": "TEXT_MAX_W",
+            "lineHeightRef": "LH_BODY",
+            "marginTopRef": "GAP_AFTER_SEP"
+          }
+        },
+        {
+          "type": "Image",
+          "image": {
+            "srcRef": "pictrue/book-pictrueTemp.png",
+            "align": "center",
+            "height": 240
+          },
+          "layout": { "marginTopRef": "GAP_SECTION" }
+        }
+      ]
+    },
+
+    {
+      "pageNumber": "origin",
+      "pageDisplayNumber": "Ⅱ",
+      "template": "textTop",
+      "overrides": {
+        "box": { "widthRef": "PAGE_CONTENT_W", "heightRef": "PAGE_CONTENT_H" }
+      },
+      "visibility": {
+        "chapterTitle": true,
+        "chapterSeparator": true,
+        "subTitle": true,
+        "subTitleSeparator": true
+      },
+      "lines": [
+        {
+          "type": "Title",
+          "text": "万圣节的由来",
+          "styleRef": "TITLE",
+          "layout": {
+            "maxWidthRef": "TEXT_MAX_W",
+            "lineHeightRef": "LH_TITLE",
+            "marginTopRef": "MT_TITLE"
+          }
+        },
+        {
+          "type": "Separator",
+          "styleRef": "SEP_ORNATE",
+          "layout": { "heightRef": "SEP_H", "marginTopRef": "GAP_AFTER_TITLE" }
+        },
+
+        {
+          "type": "ImageParagraph",
+          "mode": "imageBefore",
+          "image": {
+            "srcRef": "pictrue/book-origin.png",
+            "align": "center",
+            "height": 200
+          },
+          "paragraph": {
+            "text": "很久很久以前，怪物爱偷灵魂，尤其是孩子的。万圣节这夜，它们会从黑暗森林混入村庄……",
+            "styleRef": "BODY"
+          },
+          "layout": {
+            "maxWidthRef": "TEXT_MAX_W",
+            "lineHeightRef": "LH_BODY",
+            "marginTopRef": "GAP_AFTER_SEP",
+            "gapBetweenRef": "GAP_IMAGE_PARAGRAPH"
+          }
+        },
+
+        {
+          "type": "SubTitle",
+          "text": "村里的传说",
+          "styleRef": "SUBTITLE",
+          "layout": {
+            "maxWidthRef": "TEXT_MAX_W",
+            "lineHeightRef": "LH_SUBTITLE",
+            "marginTopRef": "GAP_SECTION"
+          }
+        },
+        {
+          "type": "SubTitleSeparator",
+          "styleRef": "SEP_SMALL",
+          "layout": {
+            "heightRef": "SEP_SM_H",
+            "marginTopRef": "GAP_AFTER_SUBTITLE"
+          }
+        },
+        {
+          "type": "Paragraph",
+          "i18n": "pages.origin.note",
+          "fallbackText": "孩子装怪不报真名，大人以糖易安宁；若听稻草抖响——不回望。",
+          "styleRef": "BODY",
+          "layout": {
+            "maxWidthRef": "TEXT_MAX_W",
+            "lineHeightRef": "LH_BODY",
+            "marginTopRef": "GAP_AFTER_SUBSEP"
+          }
+        }
+      ]
+    }
+  ]
+}

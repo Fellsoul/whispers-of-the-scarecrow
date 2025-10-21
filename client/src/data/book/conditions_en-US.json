@@ -1,0 +1,49 @@
+{
+  "image-1": {
+    "conditions": [
+      {
+        "type": "character_familiarity",
+        "characterId": "scarecrow",
+        "minValue": 10,
+        "description": "Scarecrow familiarity ≥ 10"
+      }
+    ],
+    "operator": "AND"
+  },
+  "image-2": {
+    "conditions": [
+      {
+        "type": "match_count",
+        "minValue": 5,
+        "description": "Complete at least 5 matches"
+      }
+    ],
+    "operator": "AND"
+  },
+  "paragraph-secret": {
+    "conditions": [
+      {
+        "type": "character_familiarity",
+        "characterId": "stranger",
+        "minValue": 20,
+        "description": "Stranger familiarity ≥ 20"
+      },
+      {
+        "type": "match_count",
+        "minValue": 10,
+        "description": "Complete at least 10 matches"
+      }
+    ],
+    "operator": "AND"
+  },
+  "title-hidden": {
+    "conditions": [
+      {
+        "type": "achievement",
+        "achievementId": "first_victory",
+        "description": "Achieve first victory"
+      }
+    ],
+    "operator": "AND"
+  }
+}
