@@ -98,7 +98,7 @@ export class BookController {
 
         // 即使 bookData 加载失败，也尝试加载 i18n 数据
         try {
-          await this.service.loadI18nData('zh-CN');
+          await this.service.loadBookData();
           console.log('[BookController] i18n data loaded separately');
         } catch (i18nError) {
           console.warn('[BookController] Failed to load i18n data:', i18nError);

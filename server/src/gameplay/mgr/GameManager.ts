@@ -3,6 +3,12 @@ import { StorageManager } from './StorageManager';
 import { PlayerManager } from './PlayerManager';
 import { MatchPoolManager } from './MatchPoolManager';
 import { ObjectManager } from './ObjectManager';
+import { Settings } from '../../Settings';
+import { EventBus } from '../../core/events/EventBus';
+import { CommunicationMgr } from '../../presentation/CommunicationGateway';
+import { CharacterRegistry } from '@shares/character/CharacterRegistry';
+import { IngameProfileManager } from './IngameProfileManager';
+import { CharacterManager } from './CharacterManager';
 
 export class GameManager extends Singleton<GameManager>() {
   private _updateInterval: number = -1;
@@ -26,10 +32,68 @@ export class GameManager extends Singleton<GameManager>() {
   }
 
   private initializeManagers(): void {
+    // 初始化角色注册表 - 优先加载 / Initialize character registry first
+    try {
+      CharacterRegistry.initialize();
+    } catch (error) {
+      console.error(
+        '[GameManager] Failed to initialize CharacterRegistry:',
+        error
+      );
+    }
+
     // 初始化管理器 - 按依赖顺序 / Initialize managers in dependency order
     StorageManager.instance.initialize();
     ObjectManager.instance.start();
     PlayerManager.instance.initialize();
+    CharacterManager.instance.initialize();
+    IngameProfileManager.instance.initialize();
+
+    // 设置场景查询事件监听
+    this.setupSceneQueryListener();
+  }
+
+  /**
+   * 设置场景查询事件监听器
+   * 当客户端查询当前场景时，通过world.projectName检测并返回当前场景
+   */
+  private setupSceneQueryListener(): void {
+    EventBus.instance.on<{ playerId: string }>('client:scene:query', (data) => {
+      console.log('[Server] Received scene query from client:', data?.playerId);
+
+      // 获取当前场景（通过world.projectName检测）
+      const currentScene = Settings.getCurrentScene();
+      console.log(
+        `[Server] Current scene detected: ${currentScene} (projectName: ${world.projectName})`
+      );
+
+      // 如果有playerId，发送给特定玩家，否则广播
+      if (data?.playerId) {
+        const playerEntity = PlayerManager.instance.getPlayerEntity(
+          data.playerId
+        );
+        if (playerEntity) {
+          CommunicationMgr.instance.sendTo(
+            playerEntity as GamePlayerEntity,
+            'server:scene:response',
+            {
+              currentScene,
+            }
+          );
+          console.log(
+            `[Server] Sent scene response to player ${data.playerId}: ${currentScene}`
+          );
+        }
+      } else {
+        // 如果没有playerId，广播给所有客户端
+        CommunicationMgr.instance.sendBroad('server:scene:response', {
+          currentScene,
+        });
+        console.log(`[Server] Broadcast scene response: ${currentScene}`);
+      }
+    });
+
+    console.log('[GameManager] Scene query listener setup complete');
   }
 
   public startUpdateInterval(): void {

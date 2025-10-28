@@ -4,6 +4,7 @@
  */
 
 import { JsonManager, JsonDataType } from '../../mgr/JsonManager';
+import i18n from '@root/i18n';
 import type {
   BookData,
   BookMarkData,
@@ -26,9 +27,6 @@ export class BookService {
   private conditionsData: ConditionsData | null = null;
   private settings: Map<string, number | string | boolean> = new Map();
   private styles: Map<string, StyleConfig> = new Map();
-  private i18nMap: Map<string, string> = new Map();
-
-  private locale: string = 'zh-CN';
 
   constructor() {
     this.initializeDefaults();
@@ -90,73 +88,8 @@ export class BookService {
     });
 
     console.log(
-      '[BookService] Defaults initialized, i18n data will be loaded from JSON'
+      '[BookService] Defaults initialized, using project i18n system'
     );
-  }
-
-  /**
-   * 加载 i18n 文本数据
-   * 从 JsonManager 加载 pages_zh-CN.json
-   */
-  async loadI18nData(locale: string = 'zh-CN'): Promise<void> {
-    try {
-      const jsonManager = JsonManager.instance;
-
-      // 设置语言环境
-      if (locale === 'zh-CN' || locale === 'en-US') {
-        jsonManager.setLocale(locale as 'zh-CN' | 'en-US');
-      }
-
-      // 从 JsonManager 加载 i18n 文本数据
-      const i18nData = await jsonManager.getDataAsync<Record<string, unknown>>(
-        JsonDataType.BOOK_I18N_TEXT
-      );
-
-      if (i18nData) {
-        // 清空现有的 i18nMap
-        this.i18nMap.clear();
-
-        // 将嵌套的 JSON 对象扁平化为 Map
-        this.flattenI18nData(i18nData);
-
-        console.log(
-          `[BookService] Loaded ${this.i18nMap.size} i18n entries for locale: ${locale}`
-        );
-      } else {
-        console.warn(`[BookService] No i18n data found for locale: ${locale}`);
-      }
-    } catch (error) {
-      console.error(
-        `[BookService] Failed to load i18n data for ${locale}:`,
-        error
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * 将嵌套的 JSON 对象扁平化为 key -> value 的 Map
-   * 例如: { "welcome": { "greet": "你好" } } -> "welcome.greet" -> "你好"
-   */
-  private flattenI18nData(
-    obj: Record<string, unknown>,
-    prefix: string = ''
-  ): void {
-    for (const [key, value] of Object.entries(obj)) {
-      const fullKey = prefix ? `${prefix}.${key}` : key;
-
-      if (
-        typeof value === 'object' &&
-        value !== null &&
-        !Array.isArray(value)
-      ) {
-        // 递归处理嵌套对象
-        this.flattenI18nData(value as Record<string, unknown>, fullKey);
-      } else {
-        // 添加到 i18nMap
-        this.i18nMap.set(fullKey, String(value));
-      }
-    }
   }
 
   /**
@@ -174,10 +107,12 @@ export class BookService {
         throw new Error('Book data is null');
       }
 
-      this.locale = this.bookData.locale || 'zh-CN';
-
-      // 加载对应语言的 i18n 数据
-      await this.loadI18nData(this.locale);
+      // 同步项目i18n语言设置
+      const bookLocale = this.bookData.locale || 'zh-CN';
+      if (i18n.language !== bookLocale) {
+        await i18n.changeLanguage(bookLocale);
+        console.log(`[BookService] Changed i18n language to: ${bookLocale}`);
+      }
 
       console.log('[BookService] Book data loaded successfully');
 
@@ -190,19 +125,22 @@ export class BookService {
 
   /**
    * 加载书签数据
-   * 从 JsonManager 获取预加载的数据
+   * 从 i18n 系统获取
    */
   async loadBookMarks(): Promise<BookMarkData> {
     try {
-      const jsonManager = JsonManager.instance;
-      this.bookMarkData = await jsonManager.getDataAsync<BookMarkData>(
-        JsonDataType.BOOK_BOOKMARKS
-      );
+      // 从 i18n 系统获取书签数据
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bookmarksData = i18n.getResourceBundle(
+        i18n.language,
+        'book_bookmarks'
+      ) as any;
 
-      if (!this.bookMarkData) {
+      if (!bookmarksData) {
         throw new Error('Bookmark data is null');
       }
 
+      this.bookMarkData = bookmarksData as BookMarkData;
       console.log('[BookService] Bookmark data loaded successfully');
       return this.bookMarkData;
     } catch (error) {
@@ -213,19 +151,22 @@ export class BookService {
 
   /**
    * 加载条件数据
-   * 从 JsonManager 获取预加载的数据
+   * 从 i18n 系统获取
    */
   async loadConditions(): Promise<ConditionsData> {
     try {
-      const jsonManager = JsonManager.instance;
-      this.conditionsData = await jsonManager.getDataAsync<ConditionsData>(
-        JsonDataType.BOOK_CONDITIONS
-      );
+      // 从 i18n 系统获取条件数据
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const conditionsData = i18n.getResourceBundle(
+        i18n.language,
+        'book_conditions'
+      ) as any;
 
-      if (!this.conditionsData) {
+      if (!conditionsData) {
         throw new Error('Conditions data is null');
       }
 
+      this.conditionsData = conditionsData as ConditionsData;
       console.log('[BookService] Conditions data loaded successfully');
       return this.conditionsData;
     } catch (error) {
@@ -285,7 +226,12 @@ export class BookService {
 
   /**
    * 解析 i18n 文本
-   * @param key i18n 键
+   * 使用项目的 i18n 系统
+   * @param key i18n 键，支持格式：
+   *   - "welcome.greet" - 从默认命名空间查找
+   *   - "pages.welcome.greet" - 从 book_pages 命名空间查找
+   *   - "bookmarks.xxx" - 从 book_bookmarks 命名空间查找
+   *   - "conditions.xxx" - 从 book_conditions 命名空间查找
    * @param fallback 后备文本
    * @returns 解析后的文本
    */
@@ -293,7 +239,35 @@ export class BookService {
     if (!key) {
       return fallback || '';
     }
-    return this.i18nMap.get(key) || fallback || key;
+
+    // 解析命名空间和实际的 key
+    let namespace = 'book_pages'; // 默认使用 book_pages 命名空间
+    let actualKey = key;
+
+    // 如果 key 以特定前缀开头，映射到对应的命名空间
+    if (key.startsWith('pages.')) {
+      namespace = 'book_pages';
+      actualKey = key.substring(6); // 移除 "pages." 前缀
+    } else if (key.startsWith('bookmarks.')) {
+      namespace = 'book_bookmarks';
+      actualKey = key.substring(10); // 移除 "bookmarks." 前缀
+    } else if (key.startsWith('conditions.')) {
+      namespace = 'book_conditions';
+      actualKey = key.substring(11); // 移除 "conditions." 前缀
+    }
+
+    // 使用项目的 i18n.t() 方法，使用命名空间前缀格式
+    // i18next 支持 "namespace:key" 格式
+    const fullKey = `${namespace}:${actualKey}`;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const translated = i18n.t(fullKey as any) as string;
+
+    console.log(
+      `[BookService] Translating key: ${key} -> fullKey: ${fullKey}, result: ${translated}`
+    );
+
+    // 如果返回的是key本身（未找到翻译），使用fallback
+    return translated !== fullKey ? translated : fallback || key;
   }
 
   /**
@@ -351,16 +325,19 @@ export class BookService {
 
   /**
    * 设置语言环境
+   * 同步到项目的 i18n 系统
    */
-  setLocale(locale: string): void {
-    this.locale = locale;
+  async setLocale(locale: string): Promise<void> {
+    await i18n.changeLanguage(locale);
+    console.log(`[BookService] Language changed to: ${locale}`);
   }
 
   /**
    * 获取当前语言环境
+   * 从项目的 i18n 系统获取
    */
   getLocale(): string {
-    return this.locale;
+    return i18n.language;
   }
 
   /**
@@ -386,6 +363,5 @@ export class BookService {
     this.conditionsData = null;
     this.settings.clear();
     this.styles.clear();
-    this.i18nMap.clear();
   }
 }

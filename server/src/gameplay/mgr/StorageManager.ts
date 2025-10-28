@@ -1,5 +1,7 @@
 import { Singleton } from '../../core/patterns/Singleton';
-import type { IPlayerData } from '@shares/IPlayerData';
+import type { IPlayerData } from '@shares/player/IPlayerData';
+import { CharacterUtils } from '@shares/character/CharacterUtils';
+import type { Character } from '@shares/character/Character';
 
 /**
  * 存储管理器
@@ -195,19 +197,55 @@ export class StorageManager extends Singleton<StorageManager>() {
     characterId: string
   ): Promise<void> {
     await this.updatePlayerData(userId, (prevData) => {
-      const unlockedList = prevData.unlockedCharacters
-        .split(',')
-        .filter((id: string) => id);
-
-      if (!unlockedList.includes(characterId)) {
-        unlockedList.push(characterId);
-      }
+      const updatedUnlockedCharacters = CharacterUtils.unlockCharacter(
+        characterId,
+        prevData.unlockedCharacters
+      );
 
       return {
         ...prevData,
-        unlockedCharacters: unlockedList.join(','),
+        unlockedCharacters: updatedUnlockedCharacters,
       };
     });
+  }
+
+  /**
+   * 获取玩家已解锁的角色列表
+   * Get player's unlocked characters
+   * @param userId 玩家ID / Player ID
+   * @returns Character数组
+   */
+  public async getPlayerUnlockedCharacters(
+    userId: string
+  ): Promise<Character[]> {
+    const playerData = await this.getPlayerData(userId);
+    if (!playerData) {
+      return [];
+    }
+    return CharacterUtils.getPlayerUnlockedCharacters(
+      playerData.unlockedCharacters
+    );
+  }
+
+  /**
+   * 获取玩家已解锁的特定阵营角色
+   * Get player's unlocked characters by faction
+   * @param userId 玩家ID / Player ID
+   * @param faction 阵营
+   * @returns Character数组
+   */
+  public async getPlayerUnlockedCharactersByFaction(
+    userId: string,
+    faction: 'Survivor' | 'Overseer'
+  ): Promise<Character[]> {
+    const playerData = await this.getPlayerData(userId);
+    if (!playerData) {
+      return [];
+    }
+    return CharacterUtils.getPlayerUnlockedCharactersByFaction(
+      playerData.unlockedCharacters,
+      faction
+    );
   }
 
   /**

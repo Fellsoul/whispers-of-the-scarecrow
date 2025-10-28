@@ -39,9 +39,19 @@ export class CommunicationMgr extends Singleton<CommunicationMgr>() {
    */
   private initializeReceiver(): void {
     remoteChannel.onServerEvent((event) => {
-      console.log(`[Server RECEIVE] Topic: ${event.args.topic}`);
+      const senderId = event.entity?.player?.userId || 'unknown';
+      console.log(
+        `[Server RECEIVE] Topic: ${event.args.topic}, From: ${senderId}`
+      );
+
+      // 在事件数据中注入发送者的playerId
+      const eventData = {
+        ...event.args.data,
+        _senderId: senderId, // 添加发送者ID
+      };
+
       // 使用 EventEmitter 将事件在服务端内部广播
-      EventBus.instance.emit(event.args.topic, event.args.data);
+      EventBus.instance.emit(event.args.topic, eventData);
     });
   }
 }

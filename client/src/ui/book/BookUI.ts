@@ -10,6 +10,8 @@ import { ConditionChecker } from './ConditionChecker';
 import { BookEvents } from './events';
 import { Animation } from '../Animation';
 import type { UiIndex_screen } from '../../../UiIndex/screens/UiIndex_screen';
+import { SettingsEvents } from '../settings/events';
+import i18n from '@root/i18n';
 
 // 使用引擎自动生成的 UI Screen 类型
 export type UiScreenInstance = UiIndex_screen;
@@ -56,6 +58,15 @@ export class BookUI {
 
   // 翻页动画状态
   private isFlipping: boolean = false;
+
+  // 保存书名的原始字号
+  private originalBookNameFontSize: number | null = null;
+
+  // 保存每个书签文本的原始字号
+  private originalBookmarkFontSizes: Map<number, number> = new Map();
+
+  // 保存页面文本元素的原始字号（key: elementName）
+  private originalTextFontSizes: Map<string, number> = new Map();
 
   // 最后一次翻页方向
   private lastFlipDirection: 'next' | 'prev' = 'next';
@@ -239,6 +250,9 @@ export class BookUI {
       // 初始状态：bookInvisible（只显示 icon）
       this.showBookInvisible();
 
+      // 初始化书本封面文本
+      this.updateBookCoverTexts();
+
       this.isInitialized = true;
     } catch (error) {
       console.error('[BookUI] Initialization failed:', error);
@@ -293,6 +307,26 @@ export class BookUI {
     if (this.eventBusListenersSetup) {
       return;
     }
+
+    // 监听语言切换事件
+    this.eventBus.on(SettingsEvents.CHANGE_LANGUAGE, async () => {
+      console.log('[BookUI] Language changed, refreshing current page content');
+
+      // 重新加载书签数据（获取新语言的书签文本）
+      try {
+        await this.service.loadBookMarks();
+        console.log('[BookUI] Bookmark data reloaded for new language');
+      } catch (error) {
+        console.error('[BookUI] Failed to reload bookmark data:', error);
+      }
+
+      // 重新填充当前显示的页面
+      this.refreshCurrentPageContent();
+      // 更新书本封面文本
+      this.updateBookCoverTexts();
+      // 更新书签文本
+      this.updateBookmarkLabels();
+    });
 
     // 监听页面变化事件
     this.eventBus.on(
@@ -452,9 +486,9 @@ export class BookUI {
   }
 
   /**
-   * 设置书签的标签文本
+   * 设置书签的标签文本（支持i18n和字号调整）
    * @param bookmarkImage 书签图片元素
-   * @param label 标签文本
+   * @param label 标签文本（i18n key或原始文本）
    * @param bookmarkNumber 书签编号（1-10）
    */
   private setBookmarkLabel(
@@ -477,11 +511,70 @@ export class BookUI {
         const textElement = child as unknown as UiText;
 
         if ('textContent' in textElement) {
+          // 根据语言调整字号
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if ((textElement as any).textFontSize !== undefined) {
+            // 保存原始字号（延迟100ms等待UIScaler完成缩放）
+            if (!this.originalBookmarkFontSizes.has(bookmarkNumber)) {
+              setTimeout(() => {
+                if (!this.originalBookmarkFontSizes.has(bookmarkNumber)) {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const currentFontSize = (textElement as any).textFontSize;
+                  this.originalBookmarkFontSizes.set(
+                    bookmarkNumber,
+                    currentFontSize
+                  );
+                  console.log(
+                    `[BookUI] Saved original fontSize for bookmark ${bookmarkNumber} after UIScaler: ${currentFontSize}`
+                  );
+
+                  // 保存后立即应用当前语言的缩放
+                  const isEnglish =
+                    i18n.language === 'en' || i18n.language === 'en-US';
+                  const scaleFactor = isEnglish ? 0.8 : 1.0;
+                  const targetFontSize = Math.floor(
+                    currentFontSize * scaleFactor
+                  );
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  (textElement as any).textFontSize = targetFontSize;
+                  console.log(
+                    `[BookUI] Applied bookmark ${bookmarkNumber} fontSize: ${currentFontSize} -> ${targetFontSize} (scale: ${scaleFactor})`
+                  );
+                }
+              }, 100);
+
+              // 首次调用时暂时不修改字号，等待延迟保存完成
+              console.log(
+                `[BookUI] Set bookmark ${bookmarkNumber} label: ${label} (waiting for UIScaler...)`
+              );
+              return;
+            }
+
+            // 获取原始字号
+            const originalFontSize =
+              this.originalBookmarkFontSizes.get(bookmarkNumber);
+            if (originalFontSize !== undefined) {
+              // 根据当前语言计算字号
+              // 中文: 保持原始字号
+              // 英文: 原始 * 0.8
+              const isEnglish =
+                i18n.language === 'en' || i18n.language === 'en-US';
+              const scaleFactor = isEnglish ? 0.8 : 1.0;
+
+              const targetFontSize = Math.floor(originalFontSize * scaleFactor);
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (textElement as any).textFontSize = targetFontSize;
+
+              console.log(
+                `[BookUI] Set bookmark ${bookmarkNumber} label: ${label}, language: ${i18n.language}, fontSize: ${originalFontSize} -> ${targetFontSize} (scale: ${scaleFactor})`
+              );
+            }
+          }
+
+          // 设置文本内容（在字号调整之后）
           textElement.textContent = label;
           textElement.visible = true;
-          console.log(
-            `[BookUI] Set bookmark ${bookmarkNumber} label: ${label}`
-          );
+
           return;
         }
       }
@@ -851,6 +944,76 @@ export class BookUI {
   }
 
   /**
+   * 刷新当前页面内容（语言切换时使用）
+   * 重新填充当前显示的左右两个页面
+   */
+  private refreshCurrentPageContent(): void {
+    const currentPageIndex = this.controller.getCurrentPageIndex();
+    if (currentPageIndex < 0) {
+      console.log('[BookUI] No current page to refresh');
+      return;
+    }
+
+    const containerLeft = this.getContainerLeft();
+    const containerRight = this.getContainerRight();
+
+    if (!containerLeft || !containerRight) {
+      console.error('[BookUI] Containers not found');
+      return;
+    }
+
+    // 重新填充左侧页面（偶数页）
+    const leftPageNum = currentPageIndex * 2;
+    this.refreshPageInContainer(containerLeft, leftPageNum);
+
+    // 重新填充右侧页面（奇数页）
+    const rightPageNum = currentPageIndex * 2 + 1;
+    this.refreshPageInContainer(containerRight, rightPageNum);
+
+    console.log(
+      `[BookUI] Refreshed page content for pageIndex ${currentPageIndex}`
+    );
+  }
+
+  /**
+   * 在指定容器中刷新指定页码的 page 元素
+   * 只重新填充内容，不改变可见性
+   */
+  private refreshPageInContainer(container: UiBox, pageNumber: number): void {
+    const { children } = container;
+    if (!children || children.length === 0) {
+      return;
+    }
+
+    // 目标 page 元素名称
+    const targetPageNames = [
+      `page-${pageNumber}`,
+      `page${pageNumber}`,
+      `Page-${pageNumber}`,
+      `Page${pageNumber}`,
+    ];
+
+    // 查找目标页面
+    for (const child of children) {
+      const { name } = child;
+      const childName = name.toLowerCase();
+
+      if (childName.startsWith('page')) {
+        const isTargetPage = targetPageNames.some(
+          (targetName) => name.toLowerCase() === targetName.toLowerCase()
+        );
+
+        if (isTargetPage) {
+          // 找到目标页，重新填充内容
+          console.log(`[BookUI] Refreshing page: ${name}`);
+          this.fillPageContentInElement(child);
+          return;
+        }
+      }
+    }
+  }
+
+  /**
    * 在指定容器中显示指定页码的 page 元素
    * 命名规则：page-0, page-1, page-2...
    * 偶数页（0, 2, 4...）应该在 containerLeft 中
@@ -999,16 +1162,83 @@ export class BookUI {
         elementName.startsWith('c-subtitle')
       ) {
         // 尝试将元素转换为 UiText 类型
-        const uiText = element as unknown as UiText;
+        const uiText = element as unknown as UiText & {
+          data?: { originalI18nKey?: string };
+        };
 
         // 检查是否具有 textContent 属性（UiText 特征）
         if ('textContent' in uiText) {
-          // 使用元素当前的 textContent 作为 i18n key
-          const i18nKey = uiText.textContent || '';
+          // 首次填充时，保存原始的 i18n key 到 data 属性
+          // 后续填充时，从 data 属性读取原始 key
+          let i18nKey: string;
+
+          if (uiText.data && uiText.data.originalI18nKey) {
+            // 已经保存过，使用保存的原始 key
+            i18nKey = uiText.data.originalI18nKey;
+          } else {
+            // 首次填充，使用当前的 textContent 作为 key 并保存
+            i18nKey = uiText.textContent || '';
+            if (i18nKey) {
+              // 保存原始 key
+              if (!uiText.data) {
+                uiText.data = {};
+              }
+              uiText.data.originalI18nKey = i18nKey;
+            }
+          }
 
           if (i18nKey) {
             // 从 JSON 数据中获取对应的文本内容
             const translatedText = this.service.getText(i18nKey, i18nKey);
+
+            // 根据语言调整字号（在设置文本之前）
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if ((uiText as any).textFontSize !== undefined) {
+              // 保存原始字号（延迟100ms等待UIScaler完成缩放）
+              if (!this.originalTextFontSizes.has(elementName)) {
+                setTimeout(() => {
+                  if (!this.originalTextFontSizes.has(elementName)) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const currentFontSize = (uiText as any).textFontSize;
+                    this.originalTextFontSizes.set(
+                      elementName,
+                      currentFontSize
+                    );
+
+                    // 保存后立即应用当前语言的缩放
+                    const isEnglish =
+                      i18n.language === 'en' || i18n.language === 'en-US';
+                    const scaleFactor = isEnglish ? 0.8 : 1.0;
+                    const targetFontSize = Math.floor(
+                      currentFontSize * scaleFactor
+                    );
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    (uiText as any).textFontSize = targetFontSize;
+                  }
+                }, 100);
+
+                // 首次调用时暂时不修改字号，等待延迟保存完成
+                // 继续设置文本内容
+              } else {
+                // 获取原始字号
+                const originalFontSize =
+                  this.originalTextFontSizes.get(elementName);
+                if (originalFontSize !== undefined) {
+                  // 根据当前语言计算字号
+                  // 中文: 保持原始字号
+                  // 英文: 原始 * 0.8
+                  const isEnglish =
+                    i18n.language === 'en' || i18n.language === 'en-US';
+                  const scaleFactor = isEnglish ? 0.8 : 1.0;
+
+                  const targetFontSize = Math.floor(
+                    originalFontSize * scaleFactor
+                  );
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  (uiText as any).textFontSize = targetFontSize;
+                }
+              }
+            }
 
             // 设置文本内容
             uiText.textContent = translatedText;
@@ -1138,6 +1368,98 @@ export class BookUI {
   }
 
   /**
+   * 更新书本封面的文本（使用 i18n）
+   */
+  private updateBookCoverTexts(): void {
+    if (!this.uiScreen) {
+      return;
+    }
+
+    // 更新书名（根据语言调整字号）
+    const bookName = this.uiScreen.uiText_bookName;
+    if (bookName) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      bookName.textContent = i18n.t('book_cover.name' as any) as string;
+
+      // 根据语言调整字号（使用类型断言访问fontSize）
+
+      const textWithFontSize = bookName as UiText;
+      if (textWithFontSize.textFontSize !== undefined) {
+        // 保存原始字号（延迟100ms等待UIScaler完成缩放）
+        if (this.originalBookNameFontSize === null) {
+          setTimeout(() => {
+            if (
+              this.originalBookNameFontSize === null &&
+              textWithFontSize.textFontSize !== undefined
+            ) {
+              this.originalBookNameFontSize = textWithFontSize.textFontSize;
+              console.log(
+                `[BookUI] Saved original book name fontSize after UIScaler: ${this.originalBookNameFontSize}`
+              );
+
+              // 保存后立即应用当前语言的缩放
+              const isEnglish =
+                i18n.language === 'en' || i18n.language === 'en-US';
+              const scaleFactor = isEnglish ? 0.56 : 1;
+              const targetFontSize = Math.floor(
+                this.originalBookNameFontSize * scaleFactor
+              );
+              textWithFontSize.textFontSize = targetFontSize;
+              console.log(
+                `[BookUI] Applied book name fontSize: ${this.originalBookNameFontSize} -> ${targetFontSize} (scale: ${scaleFactor})`
+              );
+            }
+          }, 100);
+
+          // 首次调用时暂时不修改字号，等待延迟保存完成
+          return;
+        }
+
+        // 根据当前语言计算字号
+        // 中文: 原始 * 1.0
+        // 英文: 原始 * 0.56
+        const isEnglish = i18n.language === 'en' || i18n.language === 'en-US';
+        const scaleFactor = isEnglish ? 0.56 : 1;
+
+        const targetFontSize = Math.floor(
+          this.originalBookNameFontSize * scaleFactor
+        );
+        textWithFontSize.textFontSize = targetFontSize;
+        console.log(
+          `[BookUI] Updated book name: ${bookName.textContent}, language: ${i18n.language}, fontSize: ${this.originalBookNameFontSize} -> ${textWithFontSize.textFontSize} (scale: ${scaleFactor})`
+        );
+      } else {
+        console.log(`[BookUI] Updated book name: ${bookName.textContent}`);
+      }
+    }
+
+    // 更新副标题
+    const bookSubtitle = this.uiScreen.uiText_bookSubtitle;
+    if (bookSubtitle) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      bookSubtitle.textContent = i18n.t('book_cover.subtitle' as any) as string;
+      console.log(
+        `[BookUI] Updated book subtitle: ${bookSubtitle.textContent}`
+      );
+    }
+
+    // 更新简介（支持\n换行）
+    const bookIntro = this.uiScreen.uiText_bookIntro;
+    if (bookIntro) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let introText = i18n.t('book_cover.intro' as any) as string;
+
+      // 处理换行符：将\n替换为实际换行
+      introText = introText.replace(/\\n/g, '\n');
+
+      bookIntro.textContent = introText;
+      console.log(
+        `[BookUI] Updated book intro: ${introText.substring(0, 50)}...`
+      );
+    }
+  }
+
+  /**
    * 书本关闭事件处理
    * 显示 bookBgClosed 下的所有子元素
    */
@@ -1165,6 +1487,9 @@ export class BookUI {
         }
       }
     }
+
+    // 更新封面文本（支持语言切换）
+    this.updateBookCoverTexts();
   }
 
   /**
@@ -1205,6 +1530,9 @@ export class BookUI {
           }
         }
       }
+
+      // 更新封面文本（支持语言切换）
+      this.updateBookCoverTexts();
 
       // 隐藏打开状态的书
       if (bookBgOpened) {
@@ -1657,8 +1985,9 @@ export class BookUI {
 
   /**
    * 显示 bookInvisible 状态（只显示 icon）
+   * @param showIcon 是否显示icon，默认为true
    */
-  private showBookInvisible(): void {
+  private showBookInvisible(showIcon: boolean = true): void {
     if (!this.uiScreen) {
       console.warn('[BookUI] UI screen not initialized');
       return;
@@ -1682,10 +2011,10 @@ export class BookUI {
       );
     }
 
-    // 只显示 icon
+    // 根据参数决定是否显示 icon
     if (bookIcon) {
-      bookIcon.visible = true;
-      bookIcon.imageOpacity = 1;
+      bookIcon.visible = showIcon;
+      bookIcon.imageOpacity = showIcon ? 1 : 0;
     }
 
     // 隐藏所有书本元素
@@ -1716,7 +2045,9 @@ export class BookUI {
       bookmark.visible = false;
     });
 
-    console.log('[BookUI] showBookInvisible completed: only bookIcon visible');
+    console.log(
+      `[BookUI] showBookInvisible completed: bookIcon visible=${showIcon}`
+    );
   }
 
   /**
@@ -2085,6 +2416,25 @@ export class BookUI {
    */
   private delay(ms: number): Promise<void> {
     return Animation.delay(ms);
+  }
+
+  /**
+   * 设置book icon的可见性
+   * 用于根据场景类型控制icon显示/隐藏
+   * @param visible 是否可见
+   */
+  setBookIconVisible(visible: boolean): void {
+    if (!this.uiScreen) {
+      console.warn('[BookUI] UI screen not initialized');
+      return;
+    }
+
+    const bookIcon = this.getBookIcon();
+    if (bookIcon) {
+      bookIcon.visible = visible;
+      bookIcon.imageOpacity = visible ? 1 : 0;
+      console.log(`[BookUI] Set bookIcon visibility: ${visible}`);
+    }
   }
 
   /**

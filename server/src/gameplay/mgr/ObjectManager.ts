@@ -1,6 +1,6 @@
 import { Singleton } from '../../core/patterns/Singleton';
 import { Settings } from '../../Settings';
-import { GameScene } from '../const/enum';
+import { GameMode, GameScene } from '../const/enum';
 import { EntityNode } from '@dao3fun/component';
 import { MatchPoolManager } from './MatchPoolManager';
 /**
@@ -49,19 +49,22 @@ export class ObjectManager extends Singleton<ObjectManager>() {
     world.useOBB = true;
     // 获取当前地图所有实体
     this.getAllEntities();
-    // 检测当前地图类型
-    switch (Settings.currentScene) {
+
+    // 检测当前地图类型（通过world.projectName）
+    const currentScene = Settings.getCurrentScene();
+    console.log(
+      `[ObjectManager] Initializing scene: ${currentScene} (projectName: ${world.projectName})`
+    );
+
+    switch (currentScene) {
       case GameScene.Lobby:
         this.initLobby();
         break;
-      case GameScene.GameSmall:
-        this.initGameSmall();
-        break;
-      case GameScene.GameLarge:
-        this.initGameLarge();
-        break;
       case GameScene.Readiness:
         this.initReadiness();
+        break;
+      case GameScene.Ingame:
+        this.initIngame();
         break;
       default:
         break;
@@ -83,9 +86,22 @@ export class ObjectManager extends Singleton<ObjectManager>() {
     MatchPoolManager.instance.initMatchPool();
   }
 
-  private initGameSmall(): void {}
+  private initReadiness(): void {
+    /*
+     *检查游戏类型，根据大小地图，隐藏椅子
+     */
+    if (Settings.currentGameMode === GameMode.Small) {
+      MatchPoolManager.instance.matchPoolEntrePedals =
+        this.getEntityNodesByStartsWith(
+          Settings.objectQueryMap['MatchPoolEntrePedalQueryStartsWith']
+        );
+    }
+    MatchPoolManager.instance.matchPoolBases = this.getEntityNodesByStartsWith(
+      Settings.objectQueryMap['MatchPoolBaseQueryStartsWith']
+    );
+    // 匹配池初始化
+    MatchPoolManager.instance.initMatchPool();
+  }
 
-  private initGameLarge(): void {}
-
-  private initReadiness(): void {}
+  private initIngame(): void {}
 }

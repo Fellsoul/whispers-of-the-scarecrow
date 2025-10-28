@@ -87,8 +87,8 @@ export class SettingsController {
   /**
    * 处理语言切换
    */
-  private handleLanguageToggle(): void {
-    this.settingsUI.toggleLanguage();
+  private async handleLanguageToggle(): Promise<void> {
+    await this.settingsUI.toggleLanguage();
 
     const newLanguage = this.settingsUI.getCurrentLanguage();
     const eventData: ChangeLanguageEventData = {

@@ -12,7 +12,18 @@ import { JsonManager, JsonDataType } from './JsonManager';
 import { UiScaler } from '../ui/UiScaler';
 import { SettingsUI } from '../ui/settings/SettingsUI';
 import { SettingsController } from '../ui/settings/SettingsController';
-import { SettingsEvents } from '../ui/settings/events';
+import {
+  SettingsEvents,
+  type ChangeLanguageEventData,
+} from '../ui/settings/events';
+import { UiI18nSwitcher } from '../ui/UiI18nSwitcher';
+import { MatchPoolUI } from '../ui/matchPool/MatchPoolUI';
+import { MatchPoolController } from '../ui/matchPool/MatchPoolController';
+import { CommunicationMgr } from '../presentation/CommunicationGateway';
+import { ReadinessUI } from '../ui/readiness/ReadinessUI';
+import { CharacterRegistry } from '../../../shares/character/CharacterRegistry';
+import { IngameProfilesUI } from '../ui/ingame/IngameProfilesUI';
+import { IngameProfilesController } from '../ui/ingame/IngameProfilesController_v2';
 
 /**
  * UiManager 类
@@ -32,21 +43,40 @@ export class UiManager extends Singleton<UiManager>() {
   private isInitialized: boolean = false;
   private screenScaleRatio: number = 1;
   private settingsController: SettingsController | null = null;
+  private matchPoolController: MatchPoolController | null = null;
   private eventRoutingSetup: boolean = false;
+
+  private windowMiddleAnchor: UiBox | null = null;
+  private windowTopRightAnchor: UiBox | null = null;
+  private windowTopAnchor: UiBox | null = null;
+  private windowDownRightAnchor: UiBox | null = null;
+  private windowDownAnchor: UiBox | null = null;
+  private communicationMgr: CommunicationMgr;
+  private currentScene: string | null = null;
 
   constructor() {
     super();
     this.eventBus = EventBus.instance;
-    this.calculateScreenScaleRatio();
+    this.communicationMgr = CommunicationMgr.instance;
+    // 初始化时使用默认值1，在initialize中延迟获取真实值
+    this.screenScaleRatio = 1;
   }
 
   /**
    * 计算屏幕缩放比
+   * 延迟1秒获取screenHeight以确保获取到正确的窗口大小
    * 仅当窗口高度小于1080时，缩放比小于1
    */
-  private calculateScreenScaleRatio(): void {
+  private async calculateScreenScaleRatio(): Promise<void> {
     const baseHeight = 1080;
+
+    // 延迟1秒获取screenHeight，确保引擎已正确初始化
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
     const currentHeight = screenHeight; // 全局变量，获取当前屏幕高度
+    console.log(
+      `[UiManager] Detected screen height after delay: ${currentHeight}px`
+    );
 
     // 仅当高度小于1080时才缩放
     if (currentHeight < baseHeight) {
@@ -83,11 +113,33 @@ export class UiManager extends Singleton<UiManager>() {
 
     console.log('[UiManager] Initializing...');
 
-    // 1. 先初始化 JsonManager，预加载所有书本相关的 JSON 数据
+    // 延迟获取正确的screenHeight并计算缩放比
+    await this.calculateScreenScaleRatio();
+
+    //获得页面锚点框
+    this.windowMiddleAnchor = uiScreen?.uiBox_windowMiddleAnchor as UiBox;
+    this.windowTopRightAnchor = uiScreen?.uiBox_windowTopRightAnchor as UiBox;
+    this.windowTopAnchor = uiScreen?.uiBox_windowTopAnchor as UiBox;
+    this.windowDownRightAnchor = uiScreen?.uiBox_windowDownRightAnchor as UiBox;
+    this.windowDownAnchor = uiScreen?.uiBox_windowDownAnchor as UiBox;
+
+    // 0. 初始化角色注册表 - 优先加载
+    try {
+      CharacterRegistry.initialize();
+      console.log('[UiManager] CharacterRegistry initialized');
+    } catch (error) {
+      console.error(
+        '[UiManager] Failed to initialize CharacterRegistry:',
+        error
+      );
+    }
+
+    // 1. 先初始化 JsonManager，预加载所有书本相关的 JSON 配置数据
+    // 注意：翻译数据（bookmarks, conditions）现在由 i18n 系统管理
     try {
       await JsonManager.instance.initialize([
         JsonDataType.BOOK_PAGE_CONFIG,
-        JsonDataType.BOOK_BOOKMARKS,
+        JsonDataType.MAP_HREF,
       ]);
     } catch (error) {
       console.error('[UiManager] Failed to initialize JsonManager:', error);
@@ -119,7 +171,6 @@ export class UiManager extends Singleton<UiManager>() {
 
       try {
         await settingsUI.initialize(uiScreen as unknown as UiScreenInstance);
-
         // 创建并初始化SettingsController
         this.settingsController = new SettingsController(settingsUI);
         this.settingsController.initialize();
@@ -129,9 +180,6 @@ export class UiManager extends Singleton<UiManager>() {
         console.error('[UiManager] Failed to initialize settings UI:', error);
       }
 
-      // 设置 topBar 和 windowScaleAnchor 为不可点击
-      this.setupNonInteractiveElements(uiScreen);
-
       // 应用UI缩放（仅在screenHeight < 1080时）
       if (this.screenScaleRatio < 1) {
         this.applyUiScaling(uiScreen);
@@ -139,10 +187,78 @@ export class UiManager extends Singleton<UiManager>() {
         // 缩放完成后，通知BookUI更新保存的原始位置
         bookUI.updateIconOriginalPosition();
       }
+
+      //应用i18nSwitcher
+      this.applyI18nSwitcher(uiScreen);
+
+      // 初始化MatchPool UI
+      let matchPoolUI = this.get<MatchPoolUI>('matchPool');
+      if (!matchPoolUI) {
+        matchPoolUI = new MatchPoolUI();
+        this.register('matchPool', matchPoolUI);
+      }
+
+      try {
+        await matchPoolUI.initialize(uiScreen as unknown as UiScreenInstance);
+
+        // 创建并初始化MatchPoolController
+        this.matchPoolController = new MatchPoolController(matchPoolUI);
+        this.matchPoolController.initialize();
+
+        console.log('[UiManager] MatchPool UI initialized');
+      } catch (error) {
+        console.error('[UiManager] Failed to initialize matchPool UI:', error);
+      }
     }
 
     // 4. 订阅全局事件并路由到对应模块
     this.setupEventRouting();
+
+    // 5. 设置场景查询监听器
+    this.setupSceneListener();
+
+    // 6. 查询当前场景
+    this.queryCurrentScene();
+
+    //7. 初始化Readiness UI
+    if (uiScreen) {
+      let readinessUI = this.get<ReadinessUI>('readiness');
+      if (!readinessUI) {
+        readinessUI = new ReadinessUI();
+        this.register('readiness', readinessUI);
+      }
+
+      try {
+        // ReadinessUI现在是Facade，内部管理Controller和Service
+        await readinessUI.initialize(uiScreen as unknown as UiScreenInstance);
+        console.log('[UiManager] Readiness UI initialized');
+      } catch (error) {
+        console.error('[UiManager] Failed to initialize readiness UI:', error);
+      }
+    }
+
+    //8. 初始化IngameProfiles UI
+    if (uiScreen) {
+      let ingameProfilesController =
+        this.get<IngameProfilesController>('ingameProfiles');
+      if (!ingameProfilesController) {
+        ingameProfilesController = new IngameProfilesController();
+        this.register('ingameProfiles', ingameProfilesController);
+      }
+
+      try {
+        // IngameProfilesUI现在是Facade，内部管理Controller和Service
+        await ingameProfilesController.initialize(
+          uiScreen as unknown as UiScreenInstance
+        );
+        console.log('[UiManager] IngameProfiles UI initialized');
+      } catch (error) {
+        console.error(
+          '[UiManager] Failed to initialize ingameProfiles UI:',
+          error
+        );
+      }
+    }
 
     this.isInitialized = true;
     console.log('[UiManager] Initialized successfully');
@@ -152,6 +268,20 @@ export class UiManager extends Singleton<UiManager>() {
    * 应用UI缩放
    * 递归遍历所有UI元素并应用缩放比例
    */
+  private applyI18nSwitcher(
+    uiScreen: UIModule & Record<string, unknown>
+  ): void {
+    console.log('[UiManager] Applying i18n switcher');
+    if (this.windowTopAnchor) {
+      const i18nSwitcher = new UiI18nSwitcher();
+      i18nSwitcher.switchUI(this.windowTopAnchor);
+    }
+    if (this.windowDownRightAnchor) {
+      const i18nSwitcher = new UiI18nSwitcher();
+      i18nSwitcher.switchUI(this.windowDownRightAnchor);
+    }
+  }
+
   private applyUiScaling(uiScreen: UIModule & Record<string, unknown>): void {
     console.log(
       `[UiManager] Applying UI scaling with ratio: ${this.screenScaleRatio}`
@@ -161,21 +291,39 @@ export class UiManager extends Singleton<UiManager>() {
       const scaler = new UiScaler(this.screenScaleRatio);
 
       // 查找并缩放windowMiddleAnchor（包含book相关UI）
-      const windowMiddleAnchor =
-        uiScreen.uiBox_windowMiddleAnchor as unknown as UiNode;
-      if (windowMiddleAnchor) {
+      if (this.windowMiddleAnchor) {
         console.log('[UiManager] Scaling windowMiddleAnchor and its children');
-        scaler.scaleUI(windowMiddleAnchor);
+        scaler.scaleUI(this.windowMiddleAnchor);
       }
 
       // 查找并缩放windowTopRightAnchor（包含topBar和bookIcon）
-      const windowTopRightAnchor =
-        uiScreen.uiBox_windowTopRightAnchor as unknown as UiNode;
-      if (windowTopRightAnchor) {
+      if (this.windowTopRightAnchor) {
         console.log(
           '[UiManager] Scaling windowTopRightAnchor and its children'
         );
-        scaler.scaleUI(windowTopRightAnchor);
+        scaler.scaleUI(this.windowTopRightAnchor);
+      }
+
+      //查找并缩放windowDownRightAnchor (包含准备界面系列按钮)
+      if (this.windowDownRightAnchor) {
+        console.log(
+          '[UiManager] Scaling windowDownRightAnchor and its children'
+        );
+        scaler.scaleUI(this.windowDownRightAnchor);
+      } else {
+        console.log('[UiManager] windowDownRightAnchor not found');
+      }
+
+      //查找并缩放windowTopAnchor(包含玩家)
+      if (this.windowTopAnchor) {
+        console.log('[UiManager] Scaling windowTopAnchor and its children');
+        scaler.scaleUI(this.windowTopAnchor);
+      }
+
+      //查找并缩放windowDownAnchor(包含退出按钮)
+      if (this.windowDownAnchor) {
+        console.log('[UiManager] Scaling windowDownAnchor and its children');
+        scaler.scaleUI(this.windowDownAnchor);
       }
     } catch (error) {
       console.error('[UiManager] Failed to apply UI scaling:', error);
@@ -186,50 +334,6 @@ export class UiManager extends Singleton<UiManager>() {
    * 设置不可交互的元素
    * 将 topBar 和 windowMiddleAnchor 设置为不可点击（点击穿透）
    */
-  private setupNonInteractiveElements(
-    uiScreen: UIModule & Record<string, unknown>
-  ): void {
-    try {
-      // 从 windowTopRightAnchor 中获取 topBar
-      const windowTopRightAnchor =
-        uiScreen.uiBox_windowTopRightAnchor as unknown;
-      if (
-        windowTopRightAnchor &&
-        typeof windowTopRightAnchor === 'object' &&
-        windowTopRightAnchor !== null
-      ) {
-        // 查找 topBar（在 windowTopRightAnchor 中）
-        const topBar = (windowTopRightAnchor as UiBox).findChildByName?.(
-          'topBar'
-        );
-      } else {
-        console.warn('[UiManager] windowTopRightAnchor not found in uiScreen');
-      }
-
-      // 设置 windowMiddleAnchor 为不可点击（使用 pointerEventBehavior）
-      const windowMiddleAnchor = uiScreen.uiBox_windowMiddleAnchor as unknown;
-      if (
-        windowMiddleAnchor &&
-        typeof windowMiddleAnchor === 'object' &&
-        windowMiddleAnchor !== null &&
-        'pointerEventBehavior' in windowMiddleAnchor
-      ) {
-        (
-          windowMiddleAnchor as { pointerEventBehavior: string }
-        ).pointerEventBehavior = 'NONE';
-        console.log(
-          '[UiManager] windowMiddleAnchor pointerEventBehavior set to NONE (click-through)'
-        );
-      } else {
-        console.warn('[UiManager] windowMiddleAnchor not found in uiScreen');
-      }
-    } catch (error) {
-      console.error(
-        '[UiManager] Failed to setup non-interactive elements:',
-        error
-      );
-    }
-  }
 
   /**
    * 设置事件路由
@@ -280,6 +384,27 @@ export class UiManager extends Singleton<UiManager>() {
         bookUI.prev();
       }
     });
+
+    // 语言切换事件监听
+    this.eventBus.on(
+      SettingsEvents.CHANGE_LANGUAGE,
+      async (payload?: ChangeLanguageEventData) => {
+        const newLanguage = payload?.language || 'zh-CN';
+        console.log(
+          `[UiManager] Language change event received: ${newLanguage}`
+        );
+
+        // i18n 已经在 SettingsUI 中切换了，这里只需要通知其他需要更新的 UI 模块
+        // 如果有 UI 需要重新加载数据，可以在这里处理
+
+        // 例如，BookUI 可能需要重新加载书本数据
+        const bookUI = this.get<BookUI>('book');
+        if (bookUI && bookUI['controller']) {
+          console.log('[UiManager] Reloading book data for new language...');
+          // 如果 BookController 有 reload 方法，可以调用
+        }
+      }
+    );
 
     // 标记事件路由已设置
     this.eventRoutingSetup = true;
@@ -336,6 +461,80 @@ export class UiManager extends Singleton<UiManager>() {
    */
   getRegisteredModules(): string[] {
     return Array.from(this.uiModules.keys());
+  }
+
+  /**
+   * 设置场景响应监听器
+   */
+  private setupSceneListener(): void {
+    this.eventBus.on<{ currentScene: string }>(
+      'server:scene:response',
+      (data) => {
+        if (data?.currentScene) {
+          this.currentScene = data.currentScene;
+          console.log(
+            `[UiManager] Received current scene: ${this.currentScene}`
+          );
+
+          // 根据场景类型更新book icon显示状态
+          this.updateBookIconVisibility();
+        }
+      }
+    );
+  }
+
+  /**
+   * 查询当前场景
+   */
+  private queryCurrentScene(): void {
+    console.log('[UiManager] Querying current scene from server');
+    this.communicationMgr.send('client:scene:query', {});
+  }
+
+  /**
+   * 获取当前场景
+   */
+  public getCurrentScene(): string | null {
+    return this.currentScene;
+  }
+
+  /**
+   * 更新book icon的显示状态
+   * 如果场景是readiness/gameSmall/gameLarge，则隐藏icon
+   */
+  private updateBookIconVisibility(): void {
+    const bookUI = this.get<BookUI>('book');
+    if (!bookUI) {
+      return;
+    }
+
+    // 检查当前场景是否需要隐藏book icon
+    const shouldHideIcon = this.shouldHideBookIcon();
+
+    if (shouldHideIcon) {
+      console.log(
+        `[UiManager] Hiding book icon for scene: ${this.currentScene}`
+      );
+      // 调用BookUI的方法来隐藏icon
+      bookUI.setBookIconVisible(false);
+    } else {
+      console.log(
+        `[UiManager] Showing book icon for scene: ${this.currentScene}`
+      );
+      bookUI.setBookIconVisible(true);
+    }
+  }
+
+  /**
+   * 判断当前场景是否需要隐藏book icon
+   */
+  private shouldHideBookIcon(): boolean {
+    if (!this.currentScene) {
+      return false;
+    }
+
+    const hideScenes = ['readiness', 'ingame'];
+    return hideScenes.includes(this.currentScene);
   }
 
   /**

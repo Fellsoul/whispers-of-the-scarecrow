@@ -24,18 +24,11 @@ export class UiScaler {
   }
 
   /**
-   * 对外入口：缩放UI树
+   * 对外入口：缩放并对齐UI树
    * @param root UI根节点
    */
   scaleUI(root: UiNode): void {
-    console.log(`[UiScaler] Starting to scale UI with ratio: ${this.ratio}`);
-
-    // 简化方案：直接全局等比缩放，不做快照
-    // 因为快照时机可能太早，UI元素尺寸还未初始化
-    console.log('[UiScaler] Applying simple global scale...');
     this.applySimpleScale(root);
-
-    console.log('[UiScaler] UI scaling completed');
   }
 
   /**
@@ -53,20 +46,12 @@ export class UiScaler {
         return;
       }
 
-      const nodeName = node.name || 'unnamed';
-
       // 缩放位置
       if (r.position?.offset) {
         const origX = r.position.offset.x;
         const origY = r.position.offset.y;
         r.position.offset.x = Math.round(origX * this.ratio);
         r.position.offset.y = Math.round(origY * this.ratio);
-
-        if (origX !== 0 || origY !== 0) {
-          console.log(
-            `[UiScaler] "${nodeName}": pos(${origX},${origY})->(${r.position.offset.x},${r.position.offset.y})`
-          );
-        }
       }
 
       // 缩放尺寸
@@ -75,12 +60,6 @@ export class UiScaler {
         const origH = r.size.offset.y;
         r.size.offset.x = Math.max(1, Math.round(origW * this.ratio));
         r.size.offset.y = Math.max(1, Math.round(origH * this.ratio));
-
-        if (origW !== 0 || origH !== 0) {
-          console.log(
-            `[UiScaler] "${nodeName}": size(${origW},${origH})->(${r.size.offset.x},${r.size.offset.y})`
-          );
-        }
       }
 
       // 缩放文本属性
@@ -180,11 +159,6 @@ export class UiScaler {
 
         // 文本额外缩放
         this.scaleTextIfNeeded(r);
-
-        const nodeName = node.name || 'unnamed';
-        console.log(
-          `[UiScaler] "${nodeName}": pos(${s.ox},${s.oy})->(${nx},${ny}), size(${s.ow},${s.oh})->(${nw},${nh})`
-        );
 
         // 当前节点作为后续子节点的"父目标尺寸"
         parentW = nw;

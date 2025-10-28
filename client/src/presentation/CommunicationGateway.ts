@@ -44,4 +44,8 @@ export class CommunicationMgr extends Singleton<CommunicationMgr>() {
       }
     });
   }
+
+  public initialize(): void {
+    this.initializeReceiver();
+  }
 }

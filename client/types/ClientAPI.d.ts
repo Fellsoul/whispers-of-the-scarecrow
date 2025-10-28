@@ -94,7 +94,7 @@ declare class EventEmitter<EventMap extends Record<string, any>> {
   remove<K extends keyof EventMap>(
     type: K,
     listener: (event: EventMap[K]) => void
-  ): void; 
+  ): void;
   /**
    * @zh 移除找到的所有 listener，不传则移除事件下所有。
    * @en Removes all found listeners, or all listeners for the event if none are passed.
@@ -387,9 +387,7 @@ declare class UiNode {
    * @en The name of the child node.
    * @link https://docs.dao3.fun/arenapro/zh/difference/findChildByName.html
    */
-  findChildByName<T extends UiElement>(
-    name: string
-  ): T | undefined;
+  findChildByName<T extends UiElement>(name: string): T | undefined;
   /**
    * @zh 管理节点相关的事件。
    * @en Manages events related to the node.
@@ -526,12 +524,12 @@ declare class UiText extends UiRenderable {
   /**
    * @zh 富文本标记，表示内容是否支持富文本格式
    * 当前支持的xml标签有：
-   * - &lt;font size=&quot;16&quot; color=&quot;#D03737&quot;&gt;内容&lt;/font&gt;
-   * - &lt;stroke color=&quot;#00FFFF&quot; thickness=&quot;10&quot; opacity=&quot;0.6&quot;&gt;内容&lt;/stroke&gt;
+   * - <font size="16" color="#D03737">内容</font>
+   * - <stroke color="#00FFFF" thickness="10" opacity="0.6">内容</stroke>
    * @en Rich text flag, indicating whether the content supports rich text format.
    * Currently supported XML tags are:
-   * - &lt;font size=&quot;16&quot; color=&quot;#D03737&quot;&gt;Content&lt;/font&gt;
-   * - &lt;stroke color=&quot;#00FFFF&quot; thickness=&quot;10&quot; opacity=&quot;0.6&quot;&gt;Content&lt;/stroke&gt;
+   * - <font size="16" color="#D03737">Content</font>
+   * - <stroke color="#00FFFF" thickness="10" opacity="0.6">Content</stroke>
    */
   richText: boolean;
   /**
@@ -641,7 +639,6 @@ declare class UiInput extends UiText {
  * @en UI Screen
  */
 declare class UiScreen extends UiNode {
-
   /**
    * @zh 该屏幕的标识。
    * @en The identifier for this screen.
@@ -1004,7 +1001,7 @@ declare class Audio extends EventEmitter<AudioEventMap> {
   /**
    * @zh 创建一个新的Audio实例
    * @en Creates a new Audio instance.
-   * @param url 
+   * @param url
    * @zh 设置音频的源路径
    * @en Sets the source path of the audio.
    */
@@ -1032,7 +1029,7 @@ declare class Audio extends EventEmitter<AudioEventMap> {
   /**
    * @zh 播放音频
    * @en Plays the audio.
-   * @returns 
+   * @returns
    * @zh Promise，表示音频播放完成
    * @en A Promise that resolves when the audio playback is complete.
    */
@@ -1052,10 +1049,10 @@ declare class MediaError {
   /**
    * @zh 创建 MediaError 的实例。
    * @en Creates an instance of MediaError.
-   * @param code 
+   * @param code
    * @zh 表示媒体错误类型的 MediaErrorCode 枚举值。
    * @en A MediaErrorCode enum value representing the type of media error.
-   * @param message 
+   * @param message
    * @zh 描述错误详细信息的字符串。
    * @en A string describing the details of the error.
    */
@@ -1112,10 +1109,10 @@ declare class ClientMedia {
   /**
    * @zh 播放音频
    * @en Plays audio.
-   * @param spec 
+   * @param spec
    * @zh 可选的音频配置参数，包含音频数据blob
    * @en Optional audio configuration parameters, including audio data blob.
-   * @returns 
+   * @returns
    * @zh 返回一个Promise，表示音频播放完毕
    * @en Returns a Promise that resolves when audio playback is complete.
    */
@@ -1143,7 +1140,7 @@ declare class ClientMedia {
   /**
    * @zh 开始录音
    * @en Starts recording.
-   * @returns 
+   * @returns
    * @zh 返回一个Promise，表示成功开始录音，反之则抛出错误
    * @en Returns a Promise that resolves on successful start of recording, or rejects with an error.
    */
@@ -1152,7 +1149,7 @@ declare class ClientMedia {
   /**
    * @zh 停止录音
    * @en Stops recording.
-   * @returns 
+   * @returns
    * @zh 返回一个Promise，解析为录音的Blob对象，格式为`wav`
    * @en Returns a Promise that resolves to a Blob object of the recording in `wav` format.
    */
@@ -1167,13 +1164,13 @@ declare class Blob {
   /**
    * @zh Blob 接口的构造函数，用于创建一个新的 blob 对象。
    * @en Blob interface constructor function, used to create a new blob object.
-   * @param blobParts 
+   * @param blobParts
    * @zh 一个由 ArrayBufferView、ArrayBuffer、Blob 或字符串对象组成的数组，用于构成 blob。
    * @en An array of ArrayBufferView, ArrayBuffer, Blob, or string objects that make up the blob.
-   * @param options 
+   * @param options
    * @zh 创建 blob 的可选参数，包括类型（MIME 类型）和结尾（行尾处理）。
    * @en Optional parameters for creating the blob, including type (MIME type) and endings (line ending handling).
-   * @returns 
+   * @returns
    * @zh 返回一个新的 blob 对象。
    * @en Returns a new blob object.
    */
@@ -1197,16 +1194,16 @@ declare class Blob {
   /**
    * @zh 创建一个包含原始 blob 数据子集的新 blob 对象。
    * @en Creates a new blob object that contains a subset of the original blob's data.
-   * @param start 
+   * @param start
    * @zh 子集的起始位置。如果未指定，则默认为 0。
    * @en The starting position of the subset. If not specified, it defaults to 0.
-   * @param end 
+   * @param end
    * @zh 子集的结束位置。如果未指定，则默认为 blob 的大小。
    * @en The ending position of the subset. If not specified, it defaults to the size of the blob.
-   * @param contentType 
+   * @param contentType
    * @zh 新 blob 的 MIME 类型。如果未指定，则默认为原始 blob 的类型。
    * @en The MIME type of the new blob. If not specified, it defaults to the type of the original blob.
-   * @returns 
+   * @returns
    * @zh 返回一个包含指定数据子集的新 blob 对象。
    * @en Returns a new blob object containing the specified subset of data.
    */
@@ -1215,7 +1212,7 @@ declare class Blob {
   /**
    * @zh 返回一个包含 blob 二进制数据的 ArrayBuffer。
    * @en Returns an ArrayBuffer that contains the binary data of the blob.
-   * @returns 
+   * @returns
    * @zh 返回一个 Promise，该 Promise 解析为表示 blob 数据的 ArrayBuffer。
    * @en Returns a Promise that resolves with an ArrayBuffer representing the blob's data.
    */
@@ -1224,7 +1221,7 @@ declare class Blob {
   /**
    * @zh 返回一个 ReadableStream，可用于将 blob 的数据作为 Uint8Array 流读取。
    * @en Returns a ReadableStream that can be used to read the blob's data as a stream of Uint8Array.
-   * @returns 
+   * @returns
    * @zh 返回一个表示 blob 数据的 ReadableStream。
    * @en Returns a ReadableStream that represents the blob's data.
    */
@@ -1233,7 +1230,7 @@ declare class Blob {
   /**
    * @zh 返回 blob 数据的文本表示形式。
    * @en Returns the text representation of the blob's data.
-   * @returns 
+   * @returns
    * @zh 返回一个 Promise，该 Promise 解析为表示 blob 数据的字符串。
    * @en Returns a Promise that resolves with a string representing the blob's data.
    */
@@ -1267,13 +1264,13 @@ declare class ClientHttp {
    * @zh 使用给定的 URL 和选项来发起 HTTP 请求。
    * @en Initiates an HTTP request using the given URL and options.
    *
-   * @param url 
+   * @param url
    * @zh 请求的 URL 地址。
    * @en The URL address for the request.
-   * @param options 
+   * @param options
    * @zh 可选的请求配置项，包括请求方法、头部信息等。
    * @en Optional request configuration items, including request method, header information, etc.
-   * @returns 
+   * @returns
    * @zh 返回一个 Promise，该 Promise 解析为服务器的响应。
    * @en Returns a Promise that resolves to the server's response.
    */
@@ -1293,7 +1290,7 @@ declare const screenHeight: number;
 /**
  * @zh 默认的屏幕下的UI根节点。
  * @en The root UI node under the default screen.
- * @deprecated 
+ * @deprecated
  * @zh 已不推荐使用该属性，请使用{@link UiScreen}获取屏幕对象。
  * @en This property is deprecated. Please use {@link UiScreen} to get the screen object.
  */
@@ -1449,16 +1446,16 @@ declare class BodyMixin {
   readonly bodyUsed: boolean;
   readonly size: number;
 
-  /** 
-   * @deprecated 
+  /**
+   * @deprecated
    * @zh 请改用 `body.arrayBuffer()`。
-   * @en Use `body.arrayBuffer()` instead. 
+   * @en Use `body.arrayBuffer()` instead.
    */
   buffer(): Promise<Buffer>;
   /**
    * @zh 读取响应流并将其解析为 ArrayBuffer。
    * @en Reads the response stream and resolves it as an ArrayBuffer.
-   * @returns 
+   * @returns
    * @zh 一个解析为 ArrayBuffer 的 Promise。
    * @en A promise that resolves with an ArrayBuffer.
    */
@@ -1466,7 +1463,7 @@ declare class BodyMixin {
   /**
    * @zh 读取响应流并将其解析为 FormData 对象。
    * @en Reads the response stream and resolves it as a FormData object.
-   * @returns 
+   * @returns
    * @zh 一个解析为 FormData 对象的 Promise。
    * @en A promise that resolves with a FormData object.
    */
@@ -1474,7 +1471,7 @@ declare class BodyMixin {
   /**
    * @zh 读取响应流并将其解析为 Blob。
    * @en Reads the response stream and resolves it as a Blob.
-   * @returns 
+   * @returns
    * @zh 一个解析为 Blob 的 Promise。
    * @en A promise that resolves with a Blob.
    */
@@ -1482,7 +1479,7 @@ declare class BodyMixin {
   /**
    * @zh 读取响应流并将其解析为 JSON。
    * @en Reads the response stream and resolves it as JSON.
-   * @returns 
+   * @returns
    * @zh 一个解析为 JSON 对象的 Promise。
    * @en A promise that resolves with a JSON object.
    */
@@ -1490,7 +1487,7 @@ declare class BodyMixin {
   /**
    * @zh 读取响应流并将其解析为文本。
    * @en Reads the response stream and resolves it as text.
-   * @returns 
+   * @returns
    * @zh 一个解析为字符串的 Promise。
    * @en A promise that resolves with a string.
    */
@@ -1618,10 +1615,10 @@ class AbortError extends Error {
 /**
  * @zh 延迟指定毫秒后返回一个 resolve 的 Promise 对象。
  * @en Returns a Promise that resolves after a specified number of milliseconds.
- * @param ms 
+ * @param ms
  * @zh 延迟的毫秒数。
  * @en The number of milliseconds to delay.
- * @returns 
+ * @returns
  * @zh 一个 Promise，在指定的毫秒数后 resolve。
  * @en A Promise that resolves after the specified number of milliseconds.
  * @example
@@ -1644,13 +1641,13 @@ declare function sleep(ms: number): Promise<void>;
 /**
  * @zh 用于延迟执行函数的计时器，`delayMs` 毫秒后异步执行回调函数 `callback`。
  * @en A timer for delayed execution of a function. Asynchronously executes the callback function `callback` after `delayMs` milliseconds.
- * @param callback 
+ * @param callback
  * @zh 要延迟执行的回调函数。
  * @en The callback function to be executed with a delay.
- * @param delayMs 
+ * @param delayMs
  * @zh 延迟的毫秒数。
  * @en The delay in milliseconds.
- * @returns 
+ * @returns
  * @zh 用于清除计时器的 ID。
  * @en The ID used to clear the timer.
  */
@@ -1658,7 +1655,7 @@ declare function setTimeout(callback: Function, delayMs: number): number;
 /**
  * @zh 用于清除传入 ID 对应的 `setTimeout` 计时器。
  * @en Clears the `setTimeout` timer corresponding to the provided ID.
- * @param id 
+ * @param id
  * @zh 要清除的计时器的 ID。
  * @en The ID of the timer to be cleared.
  */
@@ -1666,13 +1663,13 @@ declare function clearTimeout(id: number): void;
 /**
  * @zh 用于定时执行函数的计时器，每 `delayMs` 毫秒后异步执行回调函数 `callback`。
  * @en A timer for periodic execution of a function. Asynchronously executes the callback function `callback` every `delayMs` milliseconds.
- * @param callback 
+ * @param callback
  * @zh 要定时执行的回调函数。
  * @en The callback function to be executed periodically.
- * @param delayMs 
+ * @param delayMs
  * @zh 间隔的毫秒数。
  * @en The interval in milliseconds.
- * @returns 
+ * @returns
  * @zh 用于清除计时器的 ID。
  * @en The ID used to clear the timer.
  */
@@ -1680,7 +1677,7 @@ declare function setInterval(callback: Function, delayMs: number): number;
 /**
  * @zh 用于清除传入 ID 对应的 `setInterval` 计时器。
  * @en Clears the `setInterval` timer corresponding to the provided ID.
- * @param id 
+ * @param id
  * @zh 要清除的计时器的 ID。
  * @en The ID of the timer to be cleared.
  */
@@ -1698,4 +1695,3 @@ declare function call(key, value, callback?): any;
  * @en Child window communicates with parent window asynchronously.
  */
 declare function callAsync(key, value): Promise<any>;
-

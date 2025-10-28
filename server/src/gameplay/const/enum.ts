@@ -1,6 +1,10 @@
 export enum GameScene {
   Lobby = 'lobby',
-  GameSmall = 'gameSmall',
-  GameLarge = 'gameLarge',
   Readiness = 'readiness',
+  Ingame = 'ingame',
+}
+
+export enum GameMode {
+  Small = 'small',
+  Large = 'large',
 }

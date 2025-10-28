@@ -1,9 +1,14 @@
 import { _decorator, Component } from '@dao3fun/component';
 import { EventBus } from '../../../core/events/EventBus';
 import { CommunicationMgr } from '../../../presentation/CommunicationGateway';
-const { apclass } = _decorator;
 import { Settings } from '../../../Settings';
+import mapHrefs from '../../../data/mapHref.json';
 import { PlayerManager } from '../../mgr/PlayerManager';
+import { MatchPoolManager } from '../../mgr/MatchPoolManager';
+import { StorageManager } from '../../mgr/StorageManager';
+import { GameMode } from '../../const/enum';
+
+const { apclass } = _decorator;
 
 /**
  * 匹配池玩家数据接口
@@ -18,7 +23,11 @@ interface MatchPoolPlayerData {
  */
 interface MatchPoolUIData {
   poolId: string;
-  players: Array<{ userId: string; name: string }>;
+  players: Array<{
+    userId: string;
+    name: string;
+    avatar: string; // 玩家头像 URL
+  }>;
   maxPlayers: number;
   countdownSeconds: number;
   isStarting: boolean;
@@ -47,6 +56,9 @@ export class MatchPool extends Component<GameEntity> {
   // 匹配池ID（使用实体ID作为唯一标识）
   private poolId: string = '';
 
+  // 匹配池编号（用于匹配Readiness地图编号）
+  public poolIndex: number = -1;
+
   // 匹配池踏板位置（用于玩家退出时传送回踏板）
   public matchPoolEntrePedalPosition: GameVector3 | null = null;
 
@@ -74,8 +86,20 @@ export class MatchPool extends Component<GameEntity> {
   // 是否正在游戏中
   private isInGame: boolean = false;
 
+  // 是否在准备阶段
+  private isInReadiness: boolean = false;
+
   // 匹配池跨地图存储
   private matchPoolStorage: GameDataStorage<string[]> | null = null;
+
+  // 角色分配存储
+  private roleAssignmentStorage: GameDataStorage<{
+    overseers: string[];
+    survivors: string[];
+  }> | null = null;
+
+  // 当前游戏模式
+  private gameMode: GameMode = GameMode.Small;
 
   start() {
     this.poolId = this.node.entity.id;
@@ -98,6 +122,10 @@ export class MatchPool extends Component<GameEntity> {
     try {
       this.matchPoolStorage =
         storage.getGroupStorage<string[]>('match_pool_players');
+      this.roleAssignmentStorage = storage.getGroupStorage<{
+        overseers: string[];
+        survivors: string[];
+      }>('role_assignment');
       console.log(`[MatchPool] 存储初始化成功`);
     } catch (error) {
       console.error(`[MatchPool] 存储初始化失败:`, error);
@@ -159,6 +187,9 @@ export class MatchPool extends Component<GameEntity> {
     console.log(
       `[MatchPool] 玩家 ${userId} 加入匹配池 (${this.playersInPool.size}/${this.maxPlayers})`
     );
+
+    // 在MatchPoolManager中注册玩家
+    MatchPoolManager.instance.registerPlayerInPool(userId, this);
     // 更新玩家位置到匹配池中心 (先找到真实体)
     const playerOnlineEntity = PlayerManager.instance.getPlayerEntity(userId);
     if (playerOnlineEntity) {
@@ -167,7 +198,14 @@ export class MatchPool extends Component<GameEntity> {
         offset as GameVector3
       );
     }
-    // 通知所有匹配池玩家UI更新
+
+    // 先发送joined事件给新加入的玩家（包含当前玩家ID）
+    CommunicationMgr.instance.sendTo(playerEntity, 'matchPool:joined', {
+      poolId: this.poolId,
+      currentUserId: userId, // 发送当前玩家ID供客户端记录
+    });
+
+    // 然后通知所有匹配池玩家UI更新
     this.notifyPoolUpdate();
 
     // 检查是否可以开始倒计时
@@ -207,11 +245,16 @@ export class MatchPool extends Component<GameEntity> {
     this.playersInPool.delete(userId);
     console.log(`[MatchPool] 玩家 ${userId} 离开匹配池`);
 
-    // 传送玩家回踏板位置
-    if (this.matchPoolEntrePedalPosition) {
-      playerData.playerEntity.position = this.matchPoolEntrePedalPosition;
-    }
+    // 在MatchPoolManager中注销玩家
+    MatchPoolManager.instance.unregisterPlayerFromPool(userId);
 
+    // 传送玩家回踏板前位置
+    if (this.matchPoolEntrePedalPosition) {
+      const targetPosition = this.matchPoolEntrePedalPosition.add(
+        Settings.matchPoolPedalTeleportOffset as GameVector3
+      );
+      playerData.playerEntity.position = targetPosition;
+    }
     // 通知玩家UI清除
     CommunicationMgr.instance.sendTo(
       playerData.playerEntity,
@@ -273,13 +316,20 @@ export class MatchPool extends Component<GameEntity> {
    */
   private async startGame(): Promise<void> {
     this.isInGame = true;
+    this.isInReadiness = true;
     this.isCountingDown = false;
     console.log(`[MatchPool] 游戏开始！`);
 
     // 将匹配池玩家数据写入跨地图存储
     await this.savePlayersToStorage();
 
-    // 通知所有玩家游戏开始
+    // 执行角色分配（加权随机）
+    const roleAssignment = await this.assignRoles();
+
+    // 保存角色分配结果到GroupStorage
+    await this.saveRoleAssignment(roleAssignment);
+
+    // 通知所有玩家游戏开始（含角色分配）
     const players = Array.from(this.playersInPool.values());
     const playerEntities = players.map((p) => p.playerEntity);
 
@@ -288,14 +338,82 @@ export class MatchPool extends Component<GameEntity> {
       players: players.map((p) => ({
         userId: p.userId,
         name: p.playerEntity.player.name,
+        avatar: p.playerEntity.player.avatar || '', // 游戏开始时也包含头像
       })),
+      roleAssignment, // 发送角色分配结果给客户端
     });
+
+    // 发送地图跳转指令（使用poolIndex映射到Readiness编号）
+    await this.sendMapNavigationCommand(playerEntities);
 
     // 触发游戏开始事件（由GameManager监听并处理地图切换等逻辑）
     EventBus.instance.emit('matchPool:gameStart', {
       poolId: this.poolId,
       playerEntities,
+      roleAssignment,
     });
+
+    this.node.entity.mesh = 'mesh/MatchPoolBaseClosed.vb';
+  }
+
+  /**
+   * 传送所有玩家到对应的Readiness地图
+   */
+  private async sendMapNavigationCommand(
+    playerEntities: GamePlayerEntity[]
+  ): Promise<void> {
+    if (this.poolIndex < 0) {
+      console.warn(
+        `[MatchPool] Invalid poolIndex: ${this.poolIndex}, cannot navigate`
+      );
+      return;
+    }
+
+    const readinessMapKey = `Readiness`;
+
+    console.log(
+      `[MatchPool] Teleporting players to ${readinessMapKey} for pool #${this.poolIndex}`
+    );
+
+    // 从mapHref.json配置中获取地图ID
+    const mapId = mapHrefs[readinessMapKey as keyof typeof mapHrefs];
+
+    if (!mapId) {
+      console.error(
+        `[MatchPool] Map ID not found for ${readinessMapKey} in mapHref.json`
+      );
+      return;
+    }
+
+    // 过滤出有效的玩家（必须有userId）
+    const validPlayers = playerEntities.filter((entity) => {
+      const userId = entity.player?.userId;
+      return userId && userId !== '' && userId !== '0';
+    });
+
+    if (validPlayers.length === 0) {
+      console.warn(`[MatchPool] No valid players to teleport`);
+      return;
+    }
+
+    if (validPlayers.length > 50) {
+      console.error(
+        `[MatchPool] Too many players (${validPlayers.length}), max 50 allowed`
+      );
+      return;
+    }
+
+    // 使用world.teleport传送所有玩家到新的独立服务器
+    try {
+      const result = await world.teleport(mapId, validPlayers);
+      console.log(
+        `[MatchPool] Successfully teleported ${validPlayers.length} players to map ${mapId}, ` +
+          `serverId: ${result.serverId}`
+      );
+    } catch (error) {
+      console.error(`[MatchPool] Teleport failed:`, error);
+      world.say(`传送失败: ${error}`);
+    }
   }
 
   /**
@@ -369,11 +487,14 @@ export class MatchPool extends Component<GameEntity> {
           this.playersInPool.set(playerData.userId, playerData);
           console.log(`[MatchPool] 从等待队列添加玩家 ${playerData.userId}`);
 
-          // 通知玩家进入匹配池
+          // 通知玩家进入匹配池（包含当前玩家ID）
           CommunicationMgr.instance.sendTo(
             playerData.playerEntity,
             'matchPool:joined',
-            { poolId: this.poolId }
+            {
+              poolId: this.poolId,
+              currentUserId: playerData.userId, // 发送当前玩家ID供客户端记录
+            }
           );
         }
       }
@@ -414,30 +535,173 @@ export class MatchPool extends Component<GameEntity> {
   }
 
   /**
+   * 角色分配（加权随机）
+   * 根据玩家历史怪物率进行加权随机分配Overseer和Survivor
+   */
+  private async assignRoles(): Promise<{
+    overseers: string[];
+    survivors: string[];
+  }> {
+    const players = Array.from(this.playersInPool.values());
+    const playerIds = players.map((p) => p.userId);
+
+    // 确定需要的Overseer数量（根据游戏模式）
+    const overseerCount = this.gameMode === GameMode.Small ? 1 : 2;
+    const survivorCount = playerIds.length - overseerCount;
+
+    console.log(
+      `[MatchPool] 开始角色分配: ${overseerCount} Overseer(s), ${survivorCount} Survivor(s)`
+    );
+
+    // 获取所有玩家的数据，计算权重
+    const playerWeights: Array<{ userId: string; weight: number }> = [];
+    const storageManager = StorageManager.instance;
+
+    for (const userId of playerIds) {
+      const playerData = await storageManager.getPlayerData(userId);
+
+      if (!playerData) {
+        // 如果没有数据，使用默认权重1.0
+        playerWeights.push({ userId, weight: 1.0 });
+        continue;
+      }
+
+      // 计算怪物率（如果没有记录，默认为0）
+      const monsterGames = playerData.monsterGames || 0;
+      const totalGames = playerData.totalGames || 0;
+      const monsterRate = totalGames > 0 ? monsterGames / totalGames : 0;
+
+      // 权重计算：怪物率越低，被选为Overseer的权重越高
+      // 公式: weight = 1 - monsterRate
+      // 例如：monsterRate=0.2 -> weight=0.8 (更可能被选)
+      //      monsterRate=0.8 -> weight=0.2 (不太可能被选)
+      const weight = 1 - monsterRate;
+
+      playerWeights.push({ userId, weight: Math.max(0.1, weight) }); // 最小权重0.1，确保每个人都有机会
+
+      console.log(
+        `[MatchPool] Player ${userId}: monsterRate=${monsterRate.toFixed(2)}, weight=${weight.toFixed(2)}`
+      );
+    }
+
+    // 执行加权随机抽取Overseer
+    const overseers: string[] = [];
+    const remainingPlayers = [...playerWeights];
+
+    for (let i = 0; i < overseerCount; i++) {
+      const selected = this.weightedRandomSelect(remainingPlayers);
+      if (selected) {
+        overseers.push(selected.userId);
+        // 从剩余玩家中移除已选中的
+        const index = remainingPlayers.findIndex(
+          (p) => p.userId === selected.userId
+        );
+        if (index !== -1) {
+          remainingPlayers.splice(index, 1);
+        }
+      }
+    }
+
+    // 剩余玩家为Survivor
+    const survivors = remainingPlayers.map((p) => p.userId);
+
+    console.log(
+      `[MatchPool] 角色分配完成: Overseers=${overseers.join(',')}, Survivors=${survivors.join(',')}`
+    );
+
+    return { overseers, survivors };
+  }
+
+  /**
+   * 加权随机选择
+   * @param items 带权重的项目列表
+   */
+  private weightedRandomSelect(
+    items: Array<{ userId: string; weight: number }>
+  ): { userId: string; weight: number } | null {
+    if (items.length === 0) {
+      return null;
+    }
+
+    // 计算总权重
+    const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
+
+    // 生成随机数
+    let random = Math.random() * totalWeight;
+
+    // 选择项目
+    for (const item of items) {
+      random -= item.weight;
+      if (random <= 0) {
+        return item;
+      }
+    }
+
+    // 如果由于浮点误差没有选中，返回最后一个
+    return items[items.length - 1];
+  }
+
+  /**
+   * 保存角色分配结果到GroupStorage
+   */
+  private async saveRoleAssignment(roleAssignment: {
+    overseers: string[];
+    survivors: string[];
+  }): Promise<void> {
+    if (!this.roleAssignmentStorage) {
+      console.warn(`[MatchPool] 角色分配存储未初始化`);
+      return;
+    }
+
+    try {
+      // 使用'current'作为key，简化处理
+      await this.roleAssignmentStorage.set('current', roleAssignment);
+      console.log(`[MatchPool] 角色分配已保存到存储:`, roleAssignment);
+    } catch (error) {
+      console.error(`[MatchPool] 保存角色分配失败:`, error);
+    }
+  }
+
+  /**
    * 通知所有匹配池玩家UI更新
    */
   private notifyPoolUpdate(): void {
     const players = Array.from(this.playersInPool.values());
     const playerEntities = players.map((p) => p.playerEntity);
 
-    const uiData: MatchPoolUIData = {
-      poolId: this.poolId,
-      players: players.map((p) => ({
-        userId: p.userId,
-        name: p.playerEntity.player.name,
-      })),
-      maxPlayers: this.maxPlayers,
-      countdownSeconds: this.countdownRemaining,
-      isStarting: this.isCountingDown,
-    };
-
-    if (playerEntities.length > 0) {
-      CommunicationMgr.instance.sendTo(
-        playerEntities,
-        'matchPool:update',
-        uiData
-      );
+    if (playerEntities.length === 0) {
+      return;
     }
+
+    // 为每个玩家发送个性化的update事件（包含他们自己的userId）
+    players.forEach((playerData) => {
+      console.log(
+        `[MatchPool] 通知玩家 ${playerData.playerEntity.player.avatar} UI更新`
+      );
+      const uiData: MatchPoolUIData = {
+        poolId: this.poolId,
+        players: players.map((p) => ({
+          userId: p.userId,
+          name: p.playerEntity.player.name,
+          avatar: p.playerEntity.player.avatar || '', // 获取玩家头像
+        })),
+        maxPlayers: this.maxPlayers,
+        countdownSeconds: this.countdownRemaining,
+        isStarting: this.isCountingDown,
+      };
+
+      // 为每个玩家的update事件添加currentUserId字段
+      const personalizedData = {
+        ...uiData,
+        currentUserId: playerData.userId, // 告诉客户端当前玩家是谁
+      };
+
+      CommunicationMgr.instance.sendTo(
+        playerData.playerEntity,
+        'matchPool:update',
+        personalizedData
+      );
+    });
   }
 
   update(deltaTime: number) {
@@ -445,11 +709,8 @@ export class MatchPool extends Component<GameEntity> {
     if (this.isCountingDown) {
       this.countdownRemaining -= deltaTime;
 
-      // 每秒通知一次UI更新
-      if (
-        Math.floor(this.countdownRemaining) !==
-        Math.floor(this.countdownRemaining + deltaTime)
-      ) {
+      // 每1000ms通知一次UI更新
+      if (this.countdownRemaining % 1000 < deltaTime) {
         this.notifyPoolUpdate();
       }
 

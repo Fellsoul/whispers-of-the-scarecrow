@@ -4,6 +4,7 @@
 
 import { Animation } from '../Animation';
 import type { UiIndex_screen } from '../../../UiIndex/screens/UiIndex_screen';
+import i18n from '@root/i18n';
 
 export type UiScreenInstance = UiIndex_screen;
 
@@ -21,6 +22,17 @@ export class SettingsUI {
     console.log('[SettingsUI] Initializing...');
 
     this.uiScreen = uiScreen;
+
+    // 从 i18n 系统获取当前语言
+    const currentLang = i18n.language;
+    if (currentLang === 'en' || currentLang === 'en-US') {
+      this.currentLanguage = 'en-US';
+    } else {
+      this.currentLanguage = 'zh-CN';
+    }
+    console.log(
+      `[SettingsUI] Initial language from i18n: ${currentLang} -> ${this.currentLanguage}`
+    );
 
     // 检查必需的UI元素是否存在
     const settingsContainer = this.getSettingsContainer();
@@ -68,6 +80,9 @@ export class SettingsUI {
     // 初始化语言显示
     this.updateLanguageDisplay();
 
+    // 初始化标题文本
+    this.updateTitles();
+
     console.log('[SettingsUI] Initialized successfully');
   }
 
@@ -93,21 +108,14 @@ export class SettingsUI {
         return;
       }
 
-      // 设置settingsBg尺寸（如果宽度为0）
-      if (settingsBg.size && settingsBg.size.offset.x === 0) {
-        const bgWidth = screenWidth * 0.15;
-        settingsBg.size.offset.x = bgWidth;
-        console.log(`[SettingsUI] Set settingsBg width to: ${bgWidth}`);
-      }
-
-      // 获取settingsBg的宽度
-      const bgWidth = settingsBg.size?.offset?.x || 0;
+      // 设置settingsBg尺寸（
+      const bgWidth = screenWidth * 0.5;
 
       // 设置初始位置：在右侧外面（正值，在窗口外）
-      const startX = bgWidth;
+      const startX = 0;
 
       // 目标位置：0（完全进入视野）
-      const targetX = 0;
+      const targetX = -bgWidth;
 
       // 先设置位置和可见性
       settingsBg.position.offset.x = startX;
@@ -273,9 +281,22 @@ export class SettingsUI {
   /**
    * 切换语言
    */
-  toggleLanguage(): void {
+  async toggleLanguage(): Promise<void> {
     this.currentLanguage = this.currentLanguage === 'zh-CN' ? 'en-US' : 'zh-CN';
+
+    // 映射到 i18n 的语言代码
+    const i18nLang = this.currentLanguage === 'zh-CN' ? 'zh-CN' : 'en';
+
+    // 调用 i18n 切换语言
+    try {
+      await i18n.changeLanguage(i18nLang);
+      console.log(`[SettingsUI] i18n language changed to: ${i18nLang}`);
+    } catch (error) {
+      console.error('[SettingsUI] Failed to change i18n language:', error);
+    }
+
     this.updateLanguageDisplay();
+    this.updateTitles(); // 更新标题文本
     console.log('[SettingsUI] Language switched to:', this.currentLanguage);
   }
 
@@ -294,6 +315,37 @@ export class SettingsUI {
     if (languageBox) {
       languageBox.textContent =
         this.currentLanguage === 'zh-CN' ? '中文' : 'English';
+    }
+  }
+
+  /**
+   * 更新标题文本（使用 i18n）
+   */
+  private updateTitles(): void {
+    if (!this.uiScreen) {
+      return;
+    }
+
+    // 更新设置标题
+    const settingsTitle = this.uiScreen.uiText_settingsTitle;
+    if (settingsTitle) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      settingsTitle.textContent = i18n.t('settings.title' as any) as string;
+      console.log(
+        `[SettingsUI] Updated settings title: ${settingsTitle.textContent}`
+      );
+    }
+
+    // 更新语言标题
+    const languageTitle = this.uiScreen.uiText_languageTitle;
+    if (languageTitle) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      languageTitle.textContent = i18n.t(
+        'settings.language_title' as any
+      ) as string;
+      console.log(
+        `[SettingsUI] Updated language title: ${languageTitle.textContent}`
+      );
     }
   }
 

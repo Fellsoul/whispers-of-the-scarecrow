@@ -22,6 +22,7 @@ export interface Loadout {
  * 角色基类
  * ========================= */
 export interface BaseRole {
+  entity: string; //绑定实体名
   faction: Faction;
   codename: string; // 唯一代号（英文/下划线/驼峰）
   displayName: string; // 展示名（欧洲风格）

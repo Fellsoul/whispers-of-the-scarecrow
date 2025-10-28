@@ -27,6 +27,12 @@ export interface IPlayerData {
   /** VIP等级 / VIP level */
   vipLevel: number;
 
+  /** 怪物场次 / Monster games played */
+  monsterGames?: number;
+
+  /** 怪物率 / Monster rate (怪物场次/总场次) */
+  monsterRate?: number;
+
   /** 角色熟悉度 / Character familiarity (角色ID -> 熟悉度值) */
   characterFamiliarity?: Record<string, number>;
 

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "char_survivor_01",
+    "name": "幸存者1号",
+    "nickname": "勇者",
+    "portrait": "",
+    "scrollImage": "",
+    "intro": "一位勇敢的幸存者，擅长在危机中寻找生机。",
+    "specialSkillTitle": "求生本能",
+    "skill1": {
+      "title": "快速奔跑",
+      "desc": "提升20%移动速度，持续5秒",
+      "icon": ""
+    },
+    "skill2": {
+      "title": "躲藏",
+      "desc": "进入隐身状态，持续3秒",
+      "icon": ""
+    },
+    "faction": "Survivor"
+  },
+  {
+    "id": "char_survivor_02",
+    "name": "幸存者2号",
+    "nickname": "智者",
+    "portrait": "",
+    "scrollImage": "",
+    "intro": "聪明的策略家，善于利用环境优势。",
+    "specialSkillTitle": "智慧之光",
+    "skill1": {
+      "title": "陷阱部署",
+      "desc": "在地面放置陷阱，减速敌人",
+      "icon": ""
+    },
+    "skill2": {
+      "title": "侦查",
+      "desc": "显示附近的敌人位置",
+      "icon": ""
+    },
+    "faction": "Survivor"
+  },
+  {
+    "id": "char_overseer_01",
+    "name": "监管者",
+    "nickname": "狩猎者",
+    "portrait": "",
+    "scrollImage": "",
+    "intro": "恐怖的存在，以追捕幸存者为乐。",
+    "specialSkillTitle": "黑暗力量",
+    "skill1": {
+      "title": "冲刺",
+      "desc": "短距离快速冲刺",
+      "icon": ""
+    },
+    "skill2": {
+      "title": "感知",
+      "desc": "感知附近幸存者的心跳",
+      "icon": ""
+    },
+    "faction": "Overseer"
+  }
+]
