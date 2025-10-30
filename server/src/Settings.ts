@@ -1,11 +1,25 @@
 import { GameScene, GameMode } from './gameplay/const/enum';
 
 export const Settings = {
-  // 场景名称配置（用于通过world.projectName检测当前场景）
+  // 调试模式开关
+  debug: true, // 设置为false将关闭所有console.log输出
+
+  // 场景名称配置（用于通过world.url检测当前场景）
   lobbySceneUrl: new URL('https://view.dao3.fun/e/8ffde7513ba10b5a4614'),
-  readinessSceneUrl: new URL('https://view.dao3.fun/e/4feb0d4d0163cbad5591'),
+  readinessSmallSceneUrl: new URL(
+    'https://view.dao3.fun/e/4feb0d4d0163cbad5591'
+  ),
+  readinessLargeSceneUrl: new URL(
+    'https://view.dao3.fun/e/your-large-scene-url-here'
+  ),
 
   currentGameMode: GameMode.Small,
+
+  // 匹配池类型配置
+  matchPoolTypes: {
+    Small: 'readinessSmallSceneUrl',
+    Large: 'readinessLargeSceneUrl',
+  } as const,
   //查询字符串map，用于youxObjectInitializingManager绑定场景实体；
   //格式：['entityName']，自动检索所有以entityName开头的实体
   objectQueryMap: {
@@ -13,9 +27,10 @@ export const Settings = {
     MatchPoolBaseQueryStartsWith: ['MatchPoolBase'],
     SurvivorChairStartWith: ['ClassicChair'],
     OverseerChairStartWith: ['chairLuxurious'],
+    IronBoardQueryStartsWith: ['IronBoard'], // 铁板机关前缀
   },
   // 匹配池最大玩家数
-  maxPlayerSmall: 2,
+  maxPlayerSmall: 1,
   maxPlayerLarge: 10,
   // 匹配池倒计时时长（ms）
   countdownDurationSmall: 10000,
@@ -108,40 +123,82 @@ export const Settings = {
   characterMovementConfig: {
     // Overseer（怪物）移动速度
     overseer: {
-      walkSpeed: 0.35,
-      runSpeed: 0.35,
+      walkSpeed: 0.55,
+      runSpeed: 0.55,
       walkAcceleration: 0.07,
       runAcceleration: 0.07,
+      jumpPower: 0.6,
+      jumpSpeedFactor: 0.4,
     },
     // Survivor（幸存者）移动速度
     survivor: {
       walkSpeed: 0.3,
-      runSpeed: 0.3,
+      runSpeed: 0.5,
       walkAcceleration: 0.1,
       runAcceleration: 0.1,
+      jumpPower: 0.6,
+      jumpSpeedFactor: 0.4,
     },
   },
 
   defaultCharacter: 'char_survivor_01',
 
+  // 游戏内出生点配置（16个位置，每局游戏随机选择4/8个）(256, 10, 256)
+  ingameSpawnPositions: [
+    { x: 188, y: 10, z: 46 },
+    //{ x: 219, y: 10, z: 110 },
+    //{ x: 188, y: 10, z: 174 },
+    //{ x: 219, y: 10, z: 210 },
+  ],
+
+  // 黑幕过渡时长配置（毫秒）
+  transitionConfig: {
+    fadeInDuration: 500, // 黑幕渐显时长
+    holdDuration: 2000, // 黑幕停留时长（用于初始化）
+    fadeOutDuration: 1000, // 黑幕渐隐时长
+  },
+
   /**
-   * 获取当前场景类型
-   * 通过检测world.projectName与配置的场景名称对比
+   * 获取当前场景类型（枚举）
+   * 通过检测world.url与配置的场景名称对比
    */
-  getCurrentScene(): GameScene {
+  getCurrentSceneType(): GameScene {
     const { url } = world;
-    console.log(url.href);
-    console.log(this.lobbySceneUrl.href);
+    console.log(`[Settings] Detecting scene type from URL: ${url.href}`);
+
     if (url.href === this.lobbySceneUrl.href) {
       return GameScene.Lobby;
-    } else if (url.href === this.readinessSceneUrl.href) {
+    } else if (
+      url.href === this.readinessSmallSceneUrl.href ||
+      url.href === this.readinessLargeSceneUrl.href
+    ) {
       return GameScene.Readiness;
     }
 
     // 默认返回Ingame（或根据实际需求调整）
     console.warn(
-      `[Settings] Unknown project url: ${url}, defaulting to Ingame`
+      `[Settings] Unknown project url: ${url.href}, defaulting to Ingame`
     );
     return GameScene.Ingame;
+  },
+
+  /**
+   * 获取当前场景名称（包括编号）
+   * 例如: "ReadinessSmall", "ReadinessLarge", "Lobby"
+   * 通过world.projectName获取完整场景名称
+   */
+  getCurrentScene(): string {
+    const { projectName } = world;
+    console.log(`[Settings] Current project name: ${projectName}`);
+    return projectName;
+  },
+
+  /**
+   * 生成唯一的matchId
+   * Generate unique match ID
+   * @returns 唯一的matchId (时间戳 + 随机数)
+   */
+  generateMatchId(): string {
+    return `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   },
 };

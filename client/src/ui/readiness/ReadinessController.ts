@@ -7,10 +7,15 @@ import { CommunicationMgr } from '../../presentation/CommunicationGateway';
 import type { ReadinessService } from './ReadinessService';
 import { CharacterBinder } from './CharacterBinder';
 import { ScrollAnimator } from './ScrollAnimator';
+import { Animation } from '../Animation';
 import type { UiRefs } from './types';
 import * as Events from './events';
+import type { UiIndex_screen } from '../../../UiIndex/screens/UiIndex_screen';
+
+export type UiScreenInstance = UiIndex_screen;
 
 export class ReadinessController {
+  private uiScreen: UiScreenInstance | null = null;
   private service: ReadinessService;
   private animator: ScrollAnimator | null = null;
   private eventBus: EventBus;
@@ -27,11 +32,17 @@ export class ReadinessController {
   /**
    * 初始化Controller
    * @param uiRefs UI节点引用
+   * @param uiScreen UI屏幕实例（用于访问黑幕等全局UI元素）
    */
-  async initialize(uiRefs: UiRefs | null): Promise<void> {
+  async initialize(
+    uiRefs: UiRefs | null,
+    uiScreen: UiScreenInstance | null
+  ): Promise<void> {
     console.log('[ReadinessController] Initializing...');
 
     this.uiRefs = uiRefs;
+    this.uiScreen = uiScreen;
+
     if (!this.uiRefs) {
       console.error('[ReadinessController] No UI refs provided');
       return;
@@ -102,6 +113,18 @@ export class ReadinessController {
 
     const character = this.service.getCurrentCharacter();
     CharacterBinder.bind(character, this.uiRefs);
+
+    // 发送角色切换事件到服务端（服务端会广播给所有玩家）
+    if (character) {
+      this.communicationMgr.send(Events.GW_CHARACTER_CHANGED, {
+        characterId: character.id,
+      });
+
+      console.log(
+        '[ReadinessController] Character changed, notified server:',
+        character.id
+      );
+    }
   }
 
   /**
@@ -184,7 +207,72 @@ export class ReadinessController {
       this.handleCameraResetComplete();
     });
 
+    // 游戏开始过渡事件（S->C）
+    this.eventBus.on<{
+      gameStarting: boolean;
+      fadeInDuration: number;
+      holdDuration: number;
+      fadeOutDuration: number;
+    }>('readiness:game:start', (data) => {
+      if (data) {
+        this.handleGameStartTransition(data);
+      }
+    });
+
     console.log('[ReadinessController] Gateway events subscribed');
+  }
+
+  /**
+   * 处理游戏开始过渡
+   * 显示黑幕，隐藏Readiness UI，然后渐隐黑幕
+   */
+  private async handleGameStartTransition(data: {
+    gameStarting: boolean;
+    fadeInDuration: number;
+    holdDuration: number;
+    fadeOutDuration: number;
+  }): Promise<void> {
+    console.log('[ReadinessController] Game starting transition initiated');
+
+    // 1. 立即隐藏所有Readiness UI元素
+    this.hideAllReadinessUI();
+
+    // 2. 获取黑幕元素
+    const inputOverlay = this.uiScreen?.uiBox_inputOverlay;
+    if (!inputOverlay) {
+      console.error('[ReadinessController] inputOverlay not found');
+      return;
+    }
+
+    console.log('[ReadinessController] Starting transition overlay animation');
+
+    // 3. 使用Animation工具类执行完整的黑幕过渡：渐入 -> 停留 -> 渐出
+    // 使用backgroundOpacity而不是alpha来控制黑幕透明度
+    await Animation.transitionOverlay(
+      inputOverlay,
+      data.fadeInDuration,
+      data.holdDuration,
+      data.fadeOutDuration,
+      true // 使用backgroundOpacity
+    );
+
+    console.log('[ReadinessController] Transition complete');
+  }
+
+  /**
+   * 隐藏所有Readiness UI元素
+   */
+  private hideAllReadinessUI(): void {
+    if (this.uiRefs?.rootMiddle) {
+      this.uiRefs.rootMiddle.visible = false;
+    }
+    if (this.uiRefs?.rootDown) {
+      this.uiRefs.rootDown.visible = false;
+    }
+    if (this.uiRefs?.rootDownRight) {
+      this.uiRefs.rootDownRight.visible = false;
+    }
+    console.log('[ReadinessController] All Readiness UI hidden');
   }
 
   /**
@@ -206,32 +294,17 @@ export class ReadinessController {
         this.uiRefs.rootDown.visible = true;
       }
 
-      // 隐藏切换角色按钮（已经进入角色视图）
-      if (this.uiRefs?.switchCharacter) {
-        this.uiRefs.switchCharacter.visible = false;
-      }
-
       console.log('[ReadinessController] Character view UI shown');
     }
   }
 
   /**
-   * 处理镜头重置完成（隐藏UI，回到初始状态）
+   * 处理镜头重置完成（回到初始状态）
    */
   private handleCameraResetComplete(): void {
-    console.log('[ReadinessController] Camera reset complete, hiding UI');
+    console.log('[ReadinessController] Camera reset complete');
 
     this.isCharacterViewActive = false;
-
-    // 隐藏角色展示区域
-    if (this.uiRefs?.rootMiddle) {
-      this.uiRefs.rootMiddle.visible = false;
-    }
-
-    // 隐藏底部相机按钮
-    if (this.uiRefs?.rootDown) {
-      this.uiRefs.rootDown.visible = false;
-    }
 
     // 隐藏准备数显示
     if (this.uiRefs?.preparedCountBox) {
@@ -331,6 +404,14 @@ export class ReadinessController {
   private handleToggleCameraMode(): void {
     console.log('[ReadinessController] Toggle camera mode requested');
 
+    // 立即隐藏角色视图UI
+    if (this.uiRefs?.rootMiddle) {
+      this.uiRefs.rootMiddle.visible = false;
+    }
+    if (this.uiRefs?.rootDown) {
+      this.uiRefs.rootDown.visible = false;
+    }
+
     // 通过网关请求服务端重置相机
     const playerId = ''; // TODO: 获取当前玩家ID
     this.communicationMgr.send(Events.GW_REQUEST_CAMERA_RESET, { playerId });
@@ -406,6 +487,14 @@ export class ReadinessController {
 
     // 如果在卷轴视图中，先离开
     this.service.leaveScrollView();
+
+    // 立即隐藏切换角色和确认选择按钮
+    if (this.uiRefs?.switchCharacter) {
+      this.uiRefs.switchCharacter.visible = false;
+    }
+    if (this.uiRefs?.confirmSelection) {
+      this.uiRefs.confirmSelection.visible = false;
+    }
 
     // 发送请求到服务端切换镜头
     // 不需要指定characterIndex，服务端会使用该玩家在队列中的索引

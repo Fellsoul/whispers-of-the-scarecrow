@@ -9,11 +9,17 @@ import { CommunicationMgr } from '../../presentation/CommunicationGateway';
 import { CharacterRegistry } from '@shares/character/CharacterRegistry';
 import { IngameProfileManager } from './IngameProfileManager';
 import { CharacterManager } from './CharacterManager';
+import { ReadinessManager } from './ReadinessManager';
+import { IngameManager } from './IngameManager';
+import { GameScene } from '../const/enum';
 
 export class GameManager extends Singleton<GameManager>() {
   private _updateInterval: number = -1;
   private _lastUpdateTime: number = 0;
   private _tick: number = 60;
+
+  /** 当前场景模式 */
+  private currentSceneMode: 'readiness' | 'ingame' = 'ingame';
 
   constructor() {
     super();
@@ -42,6 +48,9 @@ export class GameManager extends Singleton<GameManager>() {
       );
     }
 
+    // 检测并设置当前场景模式
+    this.detectAndSetSceneMode();
+
     // 初始化管理器 - 按依赖顺序 / Initialize managers in dependency order
     StorageManager.instance.initialize();
     ObjectManager.instance.start();
@@ -49,8 +58,118 @@ export class GameManager extends Singleton<GameManager>() {
     CharacterManager.instance.initialize();
     IngameProfileManager.instance.initialize();
 
+    // 初始化 IngameManager（总是初始化，以便随时准备接收事件）
+    IngameManager.instance.initialize();
+    console.log('[GameManager] IngameManager initialized');
+
+    // 如果是 Readiness 场景，也初始化 ReadinessManager
+    if (this.currentSceneMode === 'readiness') {
+      ReadinessManager.instance.initialize();
+      console.log(
+        '[GameManager] ReadinessManager initialized for Readiness scene'
+      );
+    }
+
+    // 设置游戏开始事件监听
+    this.setupGameStartListener();
+
     // 设置场景查询事件监听
     this.setupSceneQueryListener();
+
+    // 广播当前场景模式给所有客户端
+    this.broadcastSceneMode();
+  }
+
+  /**
+   * 设置游戏开始事件监听器
+   * 监听ReadinessManager发出的game:start事件
+   */
+  private setupGameStartListener(): void {
+    EventBus.instance.on<{
+      totalPlayers: number;
+      readyPlayers: number;
+      playerStates: Array<{
+        userId: string;
+        isReady: boolean;
+        characterId: string;
+      }>;
+    }>('game:start', (data) => {
+      console.log(
+        '[GameManager] Received game:start event from ReadinessManager'
+      );
+      console.log(
+        `[GameManager] Total players: ${data?.totalPlayers}, Ready: ${data?.readyPlayers}`
+      );
+
+      // 切换场景模式为ingame
+      this.switchToIngameMode();
+
+      // 开始游戏初始化流程
+      this.initializeIngameSession(data);
+    });
+
+    console.log('[GameManager] Game start listener setup complete');
+  }
+
+  /**
+   * 切换到游戏模式
+   */
+  private switchToIngameMode(): void {
+    console.log('[GameManager] Switching scene mode from readiness to ingame');
+
+    this.currentSceneMode = 'ingame';
+
+    // 广播场景模式变化给所有客户端
+    CommunicationMgr.instance.sendBroad('server:scenemode:changed', {
+      sceneMode: this.currentSceneMode,
+    });
+
+    console.log('[GameManager] Scene mode switched to ingame and broadcasted');
+  }
+
+  /**
+   * 初始化游戏会话
+   * 通过事件系统委托给 IngameManager 执行
+   */
+  private initializeIngameSession(
+    data:
+      | {
+          totalPlayers: number;
+          readyPlayers: number;
+          playerStates: Array<{
+            userId: string;
+            isReady: boolean;
+            characterId: string;
+          }>;
+        }
+      | undefined
+  ): void {
+    console.log(
+      '[GameManager] Delegating ingame initialization to IngameManager...'
+    );
+
+    if (!data) {
+      console.error('[GameManager] No player data provided for ingame session');
+      return;
+    }
+
+    // 等待黑幕渐入完成（fadeInDuration）后立即传送玩家
+    const { fadeInDuration } = Settings.transitionConfig;
+    console.log(
+      `[GameManager] Waiting ${fadeInDuration}ms for client fade-in, then spawning players`
+    );
+
+    setTimeout(() => {
+      // 发送事件给 IngameManager，让它负责具体执行
+      EventBus.instance.emit('ingame:initialize', {
+        totalPlayers: data.totalPlayers,
+        playerStates: data.playerStates,
+      });
+
+      console.log(
+        '[GameManager] Ingame initialization event sent to IngameManager (after fade-in)'
+      );
+    }, fadeInDuration);
   }
 
   /**
@@ -62,9 +181,10 @@ export class GameManager extends Singleton<GameManager>() {
       console.log('[Server] Received scene query from client:', data?.playerId);
 
       // 获取当前场景（通过world.projectName检测）
-      const currentScene = Settings.getCurrentScene();
+      const currentSceneType = Settings.getCurrentSceneType();
+      const currentSceneName = Settings.getCurrentScene();
       console.log(
-        `[Server] Current scene detected: ${currentScene} (projectName: ${world.projectName})`
+        `[Server] Current scene detected: ${currentSceneName} (type: ${currentSceneType})`
       );
 
       // 如果有playerId，发送给特定玩家，否则广播
@@ -77,23 +197,64 @@ export class GameManager extends Singleton<GameManager>() {
             playerEntity as GamePlayerEntity,
             'server:scene:response',
             {
-              currentScene,
+              currentScene: currentSceneName,
+              currentSceneType: currentSceneType,
             }
           );
           console.log(
-            `[Server] Sent scene response to player ${data.playerId}: ${currentScene}`
+            `[Server] Sent scene response to player ${data.playerId}: ${currentSceneName} (type: ${currentSceneType})`
           );
         }
       } else {
         // 如果没有playerId，广播给所有客户端
         CommunicationMgr.instance.sendBroad('server:scene:response', {
-          currentScene,
+          currentScene: currentSceneName,
+          currentSceneType: currentSceneType,
         });
-        console.log(`[Server] Broadcast scene response: ${currentScene}`);
+        console.log(
+          `[Server] Broadcast scene response: ${currentSceneName} (type: ${currentSceneType})`
+        );
       }
     });
 
     console.log('[GameManager] Scene query listener setup complete');
+  }
+
+  /**
+   * 检测并设置当前场景模式
+   */
+  private detectAndSetSceneMode(): void {
+    const currentSceneType = Settings.getCurrentSceneType();
+
+    if (currentSceneType === GameScene.Readiness) {
+      this.currentSceneMode = 'readiness';
+    } else {
+      this.currentSceneMode = 'ingame';
+    }
+
+    console.log(
+      `[GameManager] Scene mode detected: ${this.currentSceneMode} (scene type: ${currentSceneType})`
+    );
+  }
+
+  /**
+   * 广播当前场景模式给所有客户端
+   */
+  private broadcastSceneMode(): void {
+    CommunicationMgr.instance.sendBroad('server:scenemode:changed', {
+      sceneMode: this.currentSceneMode,
+    });
+
+    console.log(
+      `[GameManager] Broadcast scene mode to all clients: ${this.currentSceneMode}`
+    );
+  }
+
+  /**
+   * 获取当前场景模式
+   */
+  public getCurrentSceneMode(): 'readiness' | 'ingame' {
+    return this.currentSceneMode;
   }
 
   public startUpdateInterval(): void {

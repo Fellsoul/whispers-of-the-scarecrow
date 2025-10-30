@@ -2,6 +2,9 @@ import { _decorator, Component } from '@dao3fun/component';
 import { Settings } from '../../../Settings';
 import { GameScene } from '../../const/enum';
 import { Faction } from '@shares/core/Enum';
+import { EventBus } from '../../../core/events/EventBus';
+import { CommunicationMgr } from '../../../presentation/CommunicationGateway';
+import { Logger } from '../../../core/utils/Logger';
 const { apclass } = _decorator;
 
 /**
@@ -43,10 +46,10 @@ export class CameraController extends Component<GameEntity> {
    * @param characterIndex 玩家在角色列表中的索引（用于切换角色视角）
    */
   public initializeCamera(role: Faction, characterIndex: number = 0): void {
-    const currentScene = Settings.getCurrentScene();
+    const currentSceneType = Settings.getCurrentSceneType();
 
     // 检查是否在Readiness场景
-    if (currentScene === GameScene.Readiness) {
+    if (currentSceneType === GameScene.Readiness) {
       this.isReadinessScene = true;
       this.defaultCharacterIndex = characterIndex; // 保存默认角色索引
 
@@ -324,6 +327,111 @@ export class CameraController extends Component<GameEntity> {
    */
   public getCurrentViewIndex(): number {
     return this.currentViewIndex;
+  }
+
+  /**
+   * 组件启动时设置事件监听
+   */
+  start(): void {
+    this.setupCameraEventListeners();
+  }
+
+  /**
+   * 设置相机事件监听器
+   * 监听来自客户端的相机切换请求
+   */
+  private setupCameraEventListeners(): void {
+    const eventBus = EventBus.instance;
+    const commMgr = CommunicationMgr.instance;
+
+    // 监听客户端请求切换角色视角
+    eventBus.on<{
+      characterIndex?: number;
+      isOverseer?: boolean;
+      _senderEntity?: GameEntity;
+    }>('readiness:camera:character', (data) => {
+      if (!data) {
+        Logger.warn('[CameraController] No data in camera:character event');
+        return;
+      }
+
+      // 检查事件是否发给当前玩家
+      const senderUserId = data._senderEntity?.player?.userId;
+      const myUserId = this.node.entity?.player?.userId;
+
+      Logger.log(
+        `[CameraController] Received camera:character event. Sender: ${senderUserId}, My: ${myUserId}`
+      );
+
+      if (!senderUserId || !myUserId || senderUserId !== myUserId) {
+        Logger.log(`[CameraController] Ignoring event - not for this player`);
+        return;
+      }
+
+      Logger.log(
+        `[CameraController] Processing camera character view request:`,
+        data
+      );
+
+      // 如果客户端没有指定索引，使用默认角色索引
+      const characterIndex = data.characterIndex ?? this.defaultCharacterIndex;
+      const isOverseer = data.isOverseer || false;
+
+      Logger.log(
+        `[CameraController] Switching to character view: index=${characterIndex}, isOverseer=${isOverseer}`
+      );
+
+      // 调用切换视角方法
+      this.switchToCharacterView(characterIndex, isOverseer, () => {
+        // 镜头动画完成后，通知客户端显示UI
+        const playerEntity = this.node.entity as GamePlayerEntity;
+        commMgr.sendTo(playerEntity, 'readiness:camera:complete', {
+          characterIndex,
+          isOverseer,
+        });
+        Logger.log(
+          `[CameraController] Camera animation complete, index: ${characterIndex}`
+        );
+      });
+    });
+
+    // 监听客户端请求重置相机
+    eventBus.on<{
+      _senderEntity?: GameEntity;
+    }>('readiness:camera:reset', (data) => {
+      if (!data) {
+        Logger.warn('[CameraController] No data in camera:reset event');
+        return;
+      }
+
+      // 检查事件是否发给当前玩家
+      const senderUserId = data._senderEntity?.player?.userId;
+      const myUserId = this.node.entity?.player?.userId;
+
+      Logger.log(
+        `[CameraController] Received camera:reset event. Sender: ${senderUserId}, My: ${myUserId}`
+      );
+
+      if (!senderUserId || !myUserId || senderUserId !== myUserId) {
+        Logger.log(
+          `[CameraController] Ignoring reset event - not for this player`
+        );
+        return;
+      }
+
+      Logger.log(`[CameraController] Processing camera reset request`);
+
+      this.resetToDefaultView(() => {
+        // reset动画完成后，通知客户端隐藏UI
+        const playerEntity = this.node.entity as GamePlayerEntity;
+        commMgr.sendTo(playerEntity, 'readiness:camera:reset:complete', {
+          success: true,
+        });
+        Logger.log(`[CameraController] Camera reset complete`);
+      });
+    });
+
+    Logger.log('[CameraController] Camera event listeners setup');
   }
 
   update(_deltaTime: number) {

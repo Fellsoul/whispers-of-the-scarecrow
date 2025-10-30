@@ -4,6 +4,15 @@ import type { Character } from '@shares/character/Character';
 import { CharacterRegistry } from '@shares/character/CharacterRegistry';
 import type { BaseRole } from '@shares/gameplay/BaseRole';
 import type { Faction } from '@shares/core/Enum';
+import type { SurvivorRoleBase } from '../role/SurvivorRoleBase';
+import {
+  CharacterMap,
+  getCharacterById,
+  emilyGreenwood,
+  thomasHawthorne,
+  lilianNoble,
+  sebastianMoore,
+} from '../role';
 
 /**
  * 玩家角色运行时状态
@@ -87,6 +96,44 @@ export class CharacterManager extends Singleton<CharacterManager>() {
    */
   public initialize(): void {
     console.log('[CharacterManager] Initialized');
+    console.log(
+      '[CharacterManager] Available role classes:',
+      Object.keys(CharacterMap)
+    );
+  }
+
+  /**
+   * 根据角色ID获取角色类实例
+   * @param characterId 角色ID（如 'char_survivor_01'）
+   * @returns 角色类实例
+   */
+  public getRoleInstance(characterId: string): SurvivorRoleBase | null {
+    const roleInstance = getCharacterById(characterId) as
+      | SurvivorRoleBase
+      | undefined;
+    if (!roleInstance) {
+      console.warn(
+        `[CharacterManager] Role instance not found for: ${characterId}`
+      );
+      return null;
+    }
+
+    console.log(
+      `[CharacterManager] Got role instance: ${roleInstance.displayName} (${roleInstance.codename})`
+    );
+    return roleInstance;
+  }
+
+  /**
+   * 获取所有可用的角色类
+   */
+  public getAllRoleInstances(): { [key: string]: SurvivorRoleBase } {
+    return {
+      char_survivor_01: emilyGreenwood,
+      char_survivor_02: thomasHawthorne,
+      char_survivor_03: lilianNoble,
+      char_survivor_04: sebastianMoore,
+    };
   }
 
   /**
@@ -136,6 +183,46 @@ export class CharacterManager extends Singleton<CharacterManager>() {
       userId,
       characterId,
       maxHP,
+    });
+
+    return true;
+  }
+
+  /**
+   * 更新玩家的角色ID（用于Readiness场景切换角色）
+   * @param userId 玩家ID
+   * @param newCharacterId 新的角色ID
+   */
+  public updateCharacterId(userId: string, newCharacterId: string): boolean {
+    const state = this.characterStates.get(userId);
+    if (!state) {
+      console.warn(
+        `[CharacterManager] Cannot update character - player ${userId} not found`
+      );
+      return false;
+    }
+
+    // 获取新角色静态数据
+    const newCharacter = CharacterRegistry.getById(newCharacterId);
+    if (!newCharacter) {
+      console.error(
+        `[CharacterManager] Character not found: ${newCharacterId}`
+      );
+      return false;
+    }
+
+    // 更新角色数据（保留HP、状态等运行时数据）
+    state.character = newCharacter;
+    state.lastUpdateTime = Date.now();
+
+    console.log(
+      `[CharacterManager] Updated character for player ${userId} to ${newCharacter.name}`
+    );
+
+    // 触发事件
+    this.eventBus.emit(CharacterEventType.STATS_UPDATED, {
+      userId,
+      characterId: newCharacterId,
     });
 
     return true;

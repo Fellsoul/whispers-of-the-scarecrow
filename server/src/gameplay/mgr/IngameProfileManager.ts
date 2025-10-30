@@ -69,6 +69,56 @@ export class IngameProfileManager extends Singleton<IngameProfileManager>() {
     this.eventBus.on('ingame:profiles:request', () => {
       this.broadcastAllProfiles();
     });
+
+    // 监听客户端角色切换事件（来自Readiness场景）
+    this.eventBus.on('readiness:character:changed', (data: unknown) => {
+      const eventData = data as {
+        characterId: string;
+        _senderEntity?: GameEntity;
+      };
+      const userId = eventData._senderEntity?.player?.userId;
+
+      if (!userId) {
+        console.warn(
+          '[IngameProfileManager] Character change event without valid userId'
+        );
+        return;
+      }
+
+      console.log(
+        `[IngameProfileManager] Player ${userId} changed character to ${eventData.characterId}`
+      );
+
+      // 更新CharacterManager中的角色ID（如果需要）
+      this.charMgr.updateCharacterId(userId, eventData.characterId);
+
+      // 广播给所有客户端
+      this.broadcastProfileUpdate(userId);
+    });
+
+    // 监听客户端准备状态变化（来自Readiness场景）
+    this.eventBus.on('readiness:player:state', (data: unknown) => {
+      const eventData = data as {
+        isReady: boolean;
+        characterId: string;
+        _senderEntity?: GameEntity;
+      };
+      const userId = eventData._senderEntity?.player?.userId;
+
+      if (!userId) {
+        console.warn(
+          '[IngameProfileManager] Ready state event without valid userId'
+        );
+        return;
+      }
+
+      console.log(
+        `[IngameProfileManager] Player ${userId} ready state changed to ${eventData.isReady}`
+      );
+
+      // 广播准备状态给所有客户端
+      this.broadcastReadyStateUpdate(userId, eventData.isReady);
+    });
   }
 
   /**
@@ -84,6 +134,7 @@ export class IngameProfileManager extends Singleton<IngameProfileManager>() {
     const profileData = {
       userId: state.userId,
       playerName: state.entity.player?.name || 'Unknown',
+      avatar: state.entity.player?.avatar || '', // 玩家头像
       characterId: state.character.id,
       currentHP: state.currentHP,
       maxHP: state.maxHP,
@@ -108,6 +159,7 @@ export class IngameProfileManager extends Singleton<IngameProfileManager>() {
     const profiles = allStates.map((state) => ({
       userId: state.userId,
       playerName: state.entity.player?.name || 'Unknown',
+      avatar: state.entity.player?.avatar || '', // 玩家头像
       characterId: state.character.id,
       currentHP: state.currentHP,
       maxHP: state.maxHP,
@@ -119,6 +171,23 @@ export class IngameProfileManager extends Singleton<IngameProfileManager>() {
     this.commMgr.sendBroad('ingame:profiles:batch', profiles);
 
     console.log(`[IngameProfileManager] Broadcast ${profiles.length} profiles`);
+  }
+
+  /**
+   * 广播玩家准备状态更新
+   * @param userId 玩家ID
+   * @param isReady 是否准备
+   */
+  private broadcastReadyStateUpdate(userId: string, isReady: boolean): void {
+    // 广播准备状态给所有客户端
+    this.commMgr.sendBroad('ingame:profile:ready', {
+      userId,
+      isReady,
+    });
+
+    console.log(
+      `[IngameProfileManager] Broadcast ready state for ${userId}: ${isReady}`
+    );
   }
 
   /**

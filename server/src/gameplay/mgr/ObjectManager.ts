@@ -51,12 +51,13 @@ export class ObjectManager extends Singleton<ObjectManager>() {
     this.getAllEntities();
 
     // 检测当前地图类型（通过world.projectName）
-    const currentScene = Settings.getCurrentScene();
+    const currentSceneType = Settings.getCurrentSceneType();
+    const currentSceneName = Settings.getCurrentScene();
     console.log(
-      `[ObjectManager] Initializing scene: ${currentScene} (projectName: ${world.projectName})`
+      `[ObjectManager] Initializing scene: ${currentSceneName} (type: ${currentSceneType})`
     );
 
-    switch (currentScene) {
+    switch (currentSceneType) {
       case GameScene.Lobby:
         this.initLobby();
         break;
@@ -103,5 +104,62 @@ export class ObjectManager extends Singleton<ObjectManager>() {
     MatchPoolManager.instance.initMatchPool();
   }
 
-  private initIngame(): void {}
+  public async initIngame(): Promise<void> {
+    /*
+     * 初始化游戏内实体
+     * 这会在游戏开始时调用（从Readiness过渡到Ingame时）
+     */
+    console.log('[ObjectManager] Initializing ingame entities...');
+
+    // 初始化铁板机关
+    await this.initIronBoards();
+
+    // TODO: 根据游戏模式初始化不同的实体
+    // 例如：
+    // - 初始化Survivor椅子
+    // - 初始化Overseer区域
+    // - 初始化机关、道具等游戏实体
+
+    if (Settings.currentGameMode === GameMode.Small) {
+      // 小地图初始化
+      console.log('[ObjectManager] Initializing Small map entities');
+      // this.initSurvivorChairs();
+      // this.initOverseerArea();
+    } else {
+      // 大地图初始化
+      console.log('[ObjectManager] Initializing Large map entities');
+      // this.initSurvivorChairs();
+      // this.initOverseerArea();
+    }
+
+    console.log('[ObjectManager] Ingame entities initialized');
+  }
+
+  /**
+   * 初始化铁板机关
+   * Initialize iron boards
+   */
+  private async initIronBoards(): Promise<void> {
+    // 动态导入 IronBoard 组件
+    const { IronBoard } = await import('../component/ironBoard/IronBoard');
+
+    // 查找所有名称以 "ironBoard" 开头的实体
+    const ironBoardNodes = this.getEntityNodesByStartsWith(
+      Settings.objectQueryMap['IronBoardQueryStartsWith']
+    );
+
+    console.log(`[ObjectManager] Found ${ironBoardNodes.length} iron board(s)`);
+
+    // 为每个铁板添加 IronBoard 组件
+    ironBoardNodes.forEach((node, index) => {
+      node.addComponent(IronBoard);
+      console.log(
+        `[ObjectManager] Added IronBoard component to entity ${node.entity.id} (${index + 1}/${ironBoardNodes.length})`
+      );
+    });
+
+    console.log(
+      `[ObjectManager] Iron boards initialized: ${ironBoardNodes.length} board(s)`
+    );
+  }
 }

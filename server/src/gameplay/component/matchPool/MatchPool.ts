@@ -56,11 +56,14 @@ export class MatchPool extends Component<GameEntity> {
   // 匹配池ID（使用实体ID作为唯一标识）
   private poolId: string = '';
 
-  // 匹配池编号（用于匹配Readiness地图编号）
-  public poolIndex: number = -1;
+  // 匹配池类型（Small或Large）
+  public matchPoolType: GameMode = GameMode.Small;
 
   // 匹配池踏板位置（用于玩家退出时传送回踏板）
   public matchPoolEntrePedalPosition: GameVector3 | null = null;
+
+  // 当前游戏的matchId（每次游戏开始时生成）
+  private currentMatchId: string | null = null;
 
   // 匹配池内的玩家列表
   private playersInPool: Map<string, MatchPoolPlayerData> = new Map();
@@ -98,12 +101,18 @@ export class MatchPool extends Component<GameEntity> {
     survivors: string[];
   }> | null = null;
 
-  // 当前游戏模式
-  private gameMode: GameMode = GameMode.Small;
-
   start() {
     this.poolId = this.node.entity.id;
     console.log(`[MatchPool] 匹配池初始化: ${this.poolId}`);
+
+    // 根据matchPoolType设置maxPlayers
+    this.maxPlayers =
+      this.matchPoolType === GameMode.Small
+        ? Settings.maxPlayerSmall
+        : Settings.maxPlayerLarge;
+    console.log(
+      `[MatchPool] 匹配池类型: ${this.matchPoolType}, 最大玩家数: ${this.maxPlayers}`
+    );
 
     // 初始化跨地图存储
     this.initializeStorage();
@@ -320,13 +329,17 @@ export class MatchPool extends Component<GameEntity> {
     this.isCountingDown = false;
     console.log(`[MatchPool] 游戏开始！`);
 
+    // 生成唯一的matchId
+    this.currentMatchId = Settings.generateMatchId();
+    console.log(`[MatchPool] 生成matchId: ${this.currentMatchId}`);
+
     // 将匹配池玩家数据写入跨地图存储
     await this.savePlayersToStorage();
 
     // 执行角色分配（加权随机）
     const roleAssignment = await this.assignRoles();
 
-    // 保存角色分配结果到GroupStorage
+    // 保存角色分配结果到GroupStorage（使用matchId作为key）
     await this.saveRoleAssignment(roleAssignment);
 
     // 通知所有玩家游戏开始（含角色分配）
@@ -353,7 +366,7 @@ export class MatchPool extends Component<GameEntity> {
       roleAssignment,
     });
 
-    this.node.entity.mesh = 'mesh/MatchPoolBaseClosed.vb';
+    (this.node.entity as { mesh: string }).mesh = 'mesh/MatchPoolBaseClosed.vb';
   }
 
   /**
@@ -362,17 +375,24 @@ export class MatchPool extends Component<GameEntity> {
   private async sendMapNavigationCommand(
     playerEntities: GamePlayerEntity[]
   ): Promise<void> {
-    if (this.poolIndex < 0) {
-      console.warn(
-        `[MatchPool] Invalid poolIndex: ${this.poolIndex}, cannot navigate`
-      );
+    if (!this.currentMatchId) {
+      console.error(`[MatchPool] No matchId generated, cannot navigate`);
       return;
     }
 
-    const readinessMapKey = `Readiness`;
+    // 根据matchPoolType选择对应的场景URL
+    const sceneUrlKey =
+      this.matchPoolType === GameMode.Small
+        ? 'readinessSmallSceneUrl'
+        : 'readinessLargeSceneUrl';
+
+    const readinessMapKey =
+      this.matchPoolType === GameMode.Small
+        ? 'ReadinessSmall'
+        : 'ReadinessLarge';
 
     console.log(
-      `[MatchPool] Teleporting players to ${readinessMapKey} for pool #${this.poolIndex}`
+      `[MatchPool] Teleporting players to ${readinessMapKey} (matchId: ${this.currentMatchId})`
     );
 
     // 从mapHref.json配置中获取地图ID
@@ -406,13 +426,44 @@ export class MatchPool extends Component<GameEntity> {
     // 使用world.teleport传送所有玩家到新的独立服务器
     try {
       const result = await world.teleport(mapId, validPlayers);
+      const { serverId } = result;
+
       console.log(
         `[MatchPool] Successfully teleported ${validPlayers.length} players to map ${mapId}, ` +
-          `serverId: ${result.serverId}`
+          `serverId: ${serverId}, matchId: ${this.currentMatchId}`
       );
     } catch (error) {
       console.error(`[MatchPool] Teleport failed:`, error);
       world.say(`传送失败: ${error}`);
+    }
+
+    // 保存serverId到matchId的映射，让新服务器可以找到对应的角色分配数据
+    await this.saveServerIdMapping('4feb0d4d0163cbad5591');
+
+    // 通知MatchPoolManager记录活跃游戏
+    MatchPoolManager.instance.registerActiveMatch(this.currentMatchId!, {
+      sceneUrl: Settings[sceneUrlKey as keyof typeof Settings] as URL,
+      serverId: '4feb0d4d0163cbad5591',
+    });
+  }
+
+  /**
+   * 保存serverId到matchId的映射
+   */
+  private async saveServerIdMapping(serverId: string): Promise<void> {
+    if (!this.currentMatchId) {
+      return;
+    }
+
+    try {
+      const serverMappingStorage =
+        storage.getGroupStorage<string>('server_to_match');
+      await serverMappingStorage.set(serverId, this.currentMatchId);
+      console.log(
+        `[MatchPool] Saved server mapping: ${serverId} -> ${this.currentMatchId}`
+      );
+    } catch (error) {
+      console.error(`[MatchPool] Failed to save server mapping:`, error);
     }
   }
 
@@ -522,13 +573,19 @@ export class MatchPool extends Component<GameEntity> {
    * 清理存储
    */
   private async clearStorage(): Promise<void> {
-    if (!this.matchPoolStorage) {
-      return;
-    }
-
     try {
-      await this.matchPoolStorage.remove(this.poolId);
-      console.log(`[MatchPool] 存储已清理`);
+      // 清理匹配池玩家存储
+      if (this.matchPoolStorage) {
+        await this.matchPoolStorage.remove(this.poolId);
+        console.log(`[MatchPool] match_pool_players 存储已清理`);
+      }
+
+      // 清理角色分配存储（由Readiness服务器读取后自动清理）
+      // 这里不需要清理，因为新服务器会在读取后清理
+      console.log(`[MatchPool] 游戏结束，等待Readiness服务器清理角色分配存储`);
+
+      // 重置matchId
+      this.currentMatchId = null;
     } catch (error) {
       console.error(`[MatchPool] 清理存储失败:`, error);
     }
@@ -545,8 +602,8 @@ export class MatchPool extends Component<GameEntity> {
     const players = Array.from(this.playersInPool.values());
     const playerIds = players.map((p) => p.userId);
 
-    // 确定需要的Overseer数量（根据游戏模式）
-    const overseerCount = this.gameMode === GameMode.Small ? 1 : 2;
+    // 确定需要的Overseer数量（根据匹配池类型）
+    const overseerCount = this.matchPoolType === GameMode.Small ? 1 : 2;
     const survivorCount = playerIds.length - overseerCount;
 
     console.log(
@@ -648,15 +705,18 @@ export class MatchPool extends Component<GameEntity> {
     overseers: string[];
     survivors: string[];
   }): Promise<void> {
-    if (!this.roleAssignmentStorage) {
-      console.warn(`[MatchPool] 角色分配存储未初始化`);
+    if (!this.roleAssignmentStorage || !this.currentMatchId) {
+      console.warn(`[MatchPool] 角色分配存储未初始化或matchId不存在`);
       return;
     }
 
     try {
-      // 使用'current'作为key，简化处理
-      await this.roleAssignmentStorage.set('current', roleAssignment);
-      console.log(`[MatchPool] 角色分配已保存到存储:`, roleAssignment);
+      // 使用matchId作为key保存角色分配
+      await this.roleAssignmentStorage.set(this.currentMatchId, roleAssignment);
+      console.log(
+        `[MatchPool] 角色分配已保存到存储 (matchId: ${this.currentMatchId}):`,
+        roleAssignment
+      );
     } catch (error) {
       console.error(`[MatchPool] 保存角色分配失败:`, error);
     }

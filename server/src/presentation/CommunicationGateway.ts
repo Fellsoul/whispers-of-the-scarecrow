@@ -44,10 +44,10 @@ export class CommunicationMgr extends Singleton<CommunicationMgr>() {
         `[Server RECEIVE] Topic: ${event.args.topic}, From: ${senderId}`
       );
 
-      // 在事件数据中注入发送者的playerId
+      // 在事件数据中注入发送者的实体信息，供组件判断
       const eventData = {
         ...event.args.data,
-        _senderId: senderId, // 添加发送者ID
+        _senderEntity: event.entity, // 添加发送者实体，包含player信息
       };
 
       // 使用 EventEmitter 将事件在服务端内部广播

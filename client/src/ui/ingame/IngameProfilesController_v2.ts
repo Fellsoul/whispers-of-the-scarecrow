@@ -8,6 +8,7 @@ import {
   INGAME_PROFILES_BATCH,
   INGAME_PROFILE_REMOVE,
   INGAME_PROFILES_REQUEST,
+  INGAME_PROFILE_READY,
 } from './events';
 import type { UiIndex_screen } from '../../../UiIndex/screens/UiIndex_screen';
 
@@ -103,6 +104,16 @@ export class IngameProfilesController {
       }
     });
 
+    // 监听玩家准备状态变化
+    this.eventBus.on<{ userId: string; isReady: boolean }>(
+      INGAME_PROFILE_READY,
+      (data) => {
+        if (data) {
+          this.handleReadyStateChange(data.userId, data.isReady);
+        }
+      }
+    );
+
     console.log('[IngameProfilesController] Events subscribed');
   }
 
@@ -181,6 +192,24 @@ export class IngameProfilesController {
     console.log(
       `[IngameProfilesController] Removed player ${userId} from slot ${slotIndex}`
     );
+  }
+
+  /**
+   * 处理玩家准备状态变化
+   * @param userId 玩家ID
+   * @param isReady 是否准备
+   */
+  private handleReadyStateChange(userId: string, isReady: boolean): void {
+    const slotIndex = this.service.getPlayerSlot(userId);
+
+    if (slotIndex !== -1) {
+      // 更新UI颜色
+      this.ui.updateReadyState(slotIndex, isReady);
+
+      console.log(
+        `[IngameProfilesController] Updated ready state for player ${userId} at slot ${slotIndex}: ${isReady}`
+      );
+    }
   }
 
   /**

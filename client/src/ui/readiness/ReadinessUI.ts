@@ -53,8 +53,8 @@ export class ReadinessUI {
       const characters = CharacterRegistry.getAll();
       this.service.initCharacters(characters);
 
-      // 3. 初始化Controller（传入UI引用）
-      await this.controller.initialize(this.uiRefs);
+      // 3. 初始化Controller（传入UI引用和屏幕实例）
+      await this.controller.initialize(this.uiRefs, this.uiScreen);
 
       // 4. 设置事件监听器
       this.setupEventListeners();

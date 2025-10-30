@@ -1,6 +1,8 @@
 import type { UiIndex_screen } from '../../../UiIndex/screens/UiIndex_screen';
 import type { PlayerProfileData } from './events';
 import { CharacterRegistry } from '@shares/character/CharacterRegistry';
+import i18n from '@root/i18n';
+import { EventBus } from '../../core/events/EventBus';
 
 /**
  * Profile UI引用
@@ -31,6 +33,33 @@ export class IngameProfilesUI {
 
   /** 缓存的profile容器列表 */
   private profileContainers: UiImage[] = [];
+
+  /** 缓存当前显示的玩家数据，用于语言切换时重新绑定 */
+  private cachedPlayerData: Map<number, PlayerProfileData> = new Map();
+
+  /** userId 到 slotIndex 的映射 */
+  private userIdToSlot: Map<string, number> = new Map();
+
+  /** 当前玩家的 slot index */
+  private currentPlayerSlot: number = -1;
+
+  /** 语言监听器是否已设置 */
+  private languageListenerSetup: boolean = false;
+
+  /** 场景模式监听器是否已设置 */
+  private sceneModeListenerSetup: boolean = false;
+
+  /** 当前场景模式 */
+  private sceneMode: 'readiness' | 'ingame' = 'readiness';
+
+  /** 缓存每个 profile 的原始 UiText 元素（用于恢复） */
+  private originalTextElements: Map<
+    number,
+    {
+      characterName: UiText | null;
+      characterNickname: UiText | null;
+    }
+  > = new Map();
 
   constructor(screen?: UiScreenInstance) {
     if (screen) {
@@ -68,9 +97,192 @@ export class IngameProfilesUI {
     // 清空所有profile
     this.clearAllProfiles();
 
+    // 设置事件监听器（包括场景模式监听）
+    this.setupEventListeners();
+
     console.log(
       `[IngameProfilesUI] Initialized for ${maxPlayers} players, ${this.profileContainers.length} profiles cached, ${unlockedCharacters.length} unlocked characters`
     );
+  }
+
+  /**
+   * 设置场景模式（由服务端通知）
+   * @param mode 场景模式
+   */
+  private setSceneMode(mode: 'readiness' | 'ingame'): void {
+    if (this.sceneMode === mode) {
+      return; // 模式未改变，无需重复应用
+    }
+
+    this.sceneMode = mode;
+
+    // 应用场景模式到所有 profiles
+    this.applySceneModeToAllProfiles();
+
+    console.log(`[IngameProfilesUI] Scene mode changed to: ${this.sceneMode}`);
+  }
+
+  /**
+   * 将场景模式应用到所有 profiles
+   */
+  private applySceneModeToAllProfiles(): void {
+    for (let i = 0; i < this.profiles.length; i++) {
+      this.applySceneModeToProfile(i);
+    }
+  }
+
+  /**
+   * 将场景模式应用到指定 profile
+   * @param slotIndex profile 索引
+   */
+  private applySceneModeToProfile(slotIndex: number): void {
+    const profile = this.profiles[slotIndex];
+    if (!profile) {
+      return;
+    }
+
+    if (this.sceneMode === 'readiness') {
+      // Readiness 模式：显示 avatar，隐藏 healthBar 和 status 元素
+      if (profile.avatar) {
+        profile.avatar.visible = true;
+      }
+      if (profile.healthBarClip) {
+        profile.healthBarClip.visible = false;
+      }
+      if (profile.healthBar) {
+        profile.healthBar.visible = false;
+      }
+      if (profile.statusCircle) {
+        profile.statusCircle.visible = false;
+      }
+      if (profile.statusFigure) {
+        profile.statusFigure.visible = false;
+      }
+    } else {
+      // Ingame 模式：隐藏 avatar，显示 healthBar 和 status 元素（透明）
+      if (profile.avatar) {
+        profile.avatar.visible = false;
+      }
+      if (profile.healthBarClip) {
+        profile.healthBarClip.visible = true;
+      }
+      if (profile.healthBar) {
+        profile.healthBar.visible = true;
+      }
+      if (profile.statusCircle) {
+        profile.statusCircle.visible = true;
+        // 设置透明度为0（后期可以通过动画显示）
+        (profile.statusCircle as Record<string, number>).alpha = 0;
+      }
+      if (profile.statusFigure) {
+        profile.statusFigure.visible = true;
+        // 设置透明度为0（后期可以通过动画显示）
+        (profile.statusFigure as Record<string, number>).alpha = 0;
+      }
+    }
+  }
+
+  /**
+   * 设置事件监听器
+   */
+  private setupEventListeners(): void {
+    // 设置语言切换监听器（只设置一次）
+    if (!this.languageListenerSetup) {
+      i18n.on('languageChanged', (lng: string) => {
+        console.log(
+          `[IngameProfilesUI] Language changed to ${lng}, updating all profiles`
+        );
+        this.updateAllProfilesText();
+      });
+      this.languageListenerSetup = true;
+      console.log('[IngameProfilesUI] Language listener setup complete');
+    }
+
+    // 设置场景模式监听器（只设置一次）
+    if (!this.sceneModeListenerSetup) {
+      const eventBus = EventBus.instance;
+      eventBus.on<{ sceneMode: 'readiness' | 'ingame' }>(
+        'server:scenemode:changed',
+        (data) => {
+          if (data?.sceneMode) {
+            console.log(
+              `[IngameProfilesUI] Received scene mode from server: ${data.sceneMode}`
+            );
+            this.setSceneMode(data.sceneMode);
+          }
+        }
+      );
+      this.sceneModeListenerSetup = true;
+      console.log('[IngameProfilesUI] Scene mode listener setup complete');
+    }
+
+    console.log('[IngameProfilesUI] Event listeners setup complete');
+  }
+
+  /**
+   * 更新所有profile的文本（用于语言切换）
+   */
+  private updateAllProfilesText(): void {
+    this.cachedPlayerData.forEach((data, index) => {
+      const profile = this.profiles[index];
+      if (!profile) {
+        return;
+      }
+
+      // 获取角色信息
+      const character = CharacterRegistry.getById(data.characterId);
+      if (!character) {
+        return;
+      }
+
+      const isUnlocked = this.unlockedCharacters.has(data.characterId);
+
+      // 使用 i18next 获取角色翻译文本
+      const characterName = i18n.t(
+        `character:${character.id}.name`,
+        character.id
+      );
+      const characterNickname = i18n.t(
+        `character:${character.id}.nickname`,
+        ''
+      );
+
+      // 更新角色名称
+      if (profile.characterName) {
+        const displayName = isUnlocked && character ? characterName : '???';
+        profile.characterName.textContent = displayName;
+      }
+
+      // 更新角色昵称
+      if (profile.characterNickname && character) {
+        const displayNickname = characterNickname || characterName;
+        profile.characterNickname.textContent = displayNickname;
+      }
+    });
+
+    console.log('[IngameProfilesUI] All profiles text updated');
+  }
+
+  /**
+   * 设置当前玩家的 slot index（用于 Readiness 场景角色切换）
+   * @param slotIndex slot 索引
+   */
+  public setCurrentPlayerSlot(slotIndex: number): void {
+    this.currentPlayerSlot = slotIndex;
+    console.log(`[IngameProfilesUI] Current player slot set to ${slotIndex}`);
+  }
+
+  /**
+   * 通过 userId 设置当前玩家的 slot
+   * @param userId 用户 ID
+   */
+  public setCurrentPlayerByUserId(userId: string): void {
+    const slotIndex = this.userIdToSlot.get(userId);
+    if (slotIndex !== undefined) {
+      this.setCurrentPlayerSlot(slotIndex);
+    } else {
+      console.warn(`[IngameProfilesUI] UserId ${userId} not found in mapping`);
+    }
   }
 
   /**
@@ -276,7 +488,14 @@ export class IngameProfilesUI {
       return;
     }
 
+    // 缓存玩家数据，用于语言切换时重新绑定
+    this.cachedPlayerData.set(slotIndex, data);
+
+    // 维护 userId 到 slotIndex 的映射
+    this.userIdToSlot.set(data.userId, slotIndex);
+
     console.log(`[IngameProfilesUI] Updating profile at slot ${slotIndex}:`, {
+      userId: data.userId,
       playerName: data.playerName,
       characterId: data.characterId,
       hasPlayerNameElement: !!profile.playerName,
@@ -296,17 +515,36 @@ export class IngameProfilesUI {
     const character = CharacterRegistry.getById(data.characterId);
     const isUnlocked = this.unlockedCharacters.has(data.characterId);
 
+    // 使用 i18next 获取角色翻译文本
+    const characterName = character
+      ? i18n.t(`character:${character.id}.name`, character.id)
+      : '';
+    const characterNickname = character
+      ? i18n.t(`character:${character.id}.nickname`, '')
+      : '';
+
     console.log(`[IngameProfilesUI] Character info:`, {
       characterId: data.characterId,
       found: !!character,
       isUnlocked,
-      characterName: character?.name,
-      characterNickname: character?.nickname,
+      characterName,
+      characterNickname,
     });
+
+    // 缓存原始 UiText 元素（首次更新时）
+    if (!this.originalTextElements.has(slotIndex)) {
+      this.originalTextElements.set(slotIndex, {
+        characterName: profile.characterName,
+        characterNickname: profile.characterNickname,
+      });
+      console.log(
+        `[IngameProfilesUI] Cached original text elements for slot ${slotIndex}`
+      );
+    }
 
     // 更新角色名称（未解锁显示"???"）
     if (profile.characterName) {
-      const displayName = isUnlocked && character ? character.name : '???';
+      const displayName = isUnlocked && character ? characterName : '???';
       profile.characterName.textContent = displayName;
       console.log(`[IngameProfilesUI] Set characterName to: ${displayName}`);
     } else {
@@ -316,7 +554,7 @@ export class IngameProfilesUI {
     // 更新角色昵称（默认显示，不受解锁限制）
     if (profile.characterNickname) {
       if (character) {
-        const displayNickname = character.nickname || character.name;
+        const displayNickname = characterNickname || characterName;
         profile.characterNickname.textContent = displayNickname;
         console.log(
           `[IngameProfilesUI] Set characterNickname to: ${displayNickname}`
@@ -331,10 +569,25 @@ export class IngameProfilesUI {
       console.warn(`[IngameProfilesUI] characterNickname element not found`);
     }
 
+    // 如果玩家已准备，更新颜色为绿色
+    if (data.isReady) {
+      this.updateReadyState(slotIndex, true);
+    }
+
     // 更新头像
     if (profile.avatar) {
-      if (character && isUnlocked) {
+      // 如果在 Readiness 模式，使用玩家真实头像
+      if (this.sceneMode === 'readiness' && data.avatar) {
+        profile.avatar.image = data.avatar;
+        console.log(
+          `[IngameProfilesUI] Set player avatar (Readiness mode): ${data.avatar}`
+        );
+      } else if (character && isUnlocked) {
+        // 其他情况使用角色 portrait
         profile.avatar.image = character.portrait;
+        console.log(
+          `[IngameProfilesUI] Set character portrait: ${character.portrait}`
+        );
       } else {
         profile.avatar.image = 'assets/ui/avatar_unknown.png';
       }
@@ -367,6 +620,9 @@ export class IngameProfilesUI {
 
     // 显示profile
     profile.container.visible = true;
+
+    // 应用场景模式（确保 healthBar/avatar 等元素的显示状态正确）
+    this.applySceneModeToProfile(slotIndex);
 
     console.log(
       `[IngameProfilesUI] Updated profile ${slotIndex + 1} for ${data.playerName} (${data.currentHP}/${data.maxHP} HP)`
@@ -486,11 +742,88 @@ export class IngameProfilesUI {
     }
   }
 
-  // dispose
+  /**
+   * 更新玩家准备状态（通过修改文本内容添加前缀来标识）
+   * @param slotIndex profile 槽位索引
+   * @param isReady 是否准备
+   */
+  public updateReadyState(slotIndex: number, isReady: boolean): void {
+    if (slotIndex < 0 || slotIndex >= this.profiles.length) {
+      console.warn(`[IngameProfilesUI] Invalid slotIndex: ${slotIndex}`);
+      return;
+    }
+
+    const profile = this.profiles[slotIndex];
+    if (!profile) {
+      console.warn(`[IngameProfilesUI] Profile not found at slot ${slotIndex}`);
+      return;
+    }
+
+    // 获取原始元素缓存
+    const originalElements = this.originalTextElements.get(slotIndex);
+    if (!originalElements) {
+      console.warn(
+        `[IngameProfilesUI] Original elements not found for slot ${slotIndex}`
+      );
+      return;
+    }
+
+    const readyPrefix = '✓ '; // 准备标记
+
+    if (isReady) {
+      // 确认准备：添加绿色勾选标记前缀
+      if (profile.characterName && originalElements.characterName) {
+        const originalText = originalElements.characterName.textContent || '';
+        // 只在没有前缀时添加
+        if (!originalText.startsWith(readyPrefix)) {
+          profile.characterName.textContent = readyPrefix + originalText;
+        }
+      }
+      if (profile.characterNickname && originalElements.characterNickname) {
+        const originalText =
+          originalElements.characterNickname.textContent || '';
+        if (!originalText.startsWith(readyPrefix)) {
+          profile.characterNickname.textContent = readyPrefix + originalText;
+        }
+      }
+      console.log(
+        `[IngameProfilesUI] Set ready indicator for slot ${slotIndex}`
+      );
+    } else {
+      // 取消准备：移除前缀，恢复原始文本
+      if (profile.characterName && originalElements.characterName) {
+        const originalText = originalElements.characterName.textContent || '';
+        profile.characterName.textContent = originalText.replace(
+          readyPrefix,
+          ''
+        );
+      }
+      if (profile.characterNickname && originalElements.characterNickname) {
+        const originalText =
+          originalElements.characterNickname.textContent || '';
+        profile.characterNickname.textContent = originalText.replace(
+          readyPrefix,
+          ''
+        );
+      }
+      console.log(
+        `[IngameProfilesUI] Removed ready indicator for slot ${slotIndex}`
+      );
+    }
+  }
+
+  /**
+   * 释放资源
+   */
   public dispose(): void {
     this.clearAllProfiles();
     this.unlockedCharacters.clear();
     this.profiles = [];
+    this.cachedPlayerData.clear();
+    this.userIdToSlot.clear();
+    this.originalTextElements.clear();
+    this.currentPlayerSlot = -1;
+    this.languageListenerSetup = false;
     this.profileContainers = [];
     this.uiScreen = null;
   }

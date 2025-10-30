@@ -3,6 +3,7 @@ import { StorageManager } from './StorageManager';
 import { GameManager } from './GameManager';
 import { CameraController } from '../component/player/CameraController';
 import { PlayerController } from '../component/player/PlayerController';
+import { RoleController } from '../component/player/RoleController';
 import { Settings } from '../../Settings';
 import { GameScene, GameMode } from '../const/enum';
 import { EntityNode } from '@dao3fun/component';
@@ -14,6 +15,7 @@ import { CommunicationMgr } from '../../presentation/CommunicationGateway';
 import { CharacterManager } from './CharacterManager';
 import { CharacterRegistry } from '@shares/character/CharacterRegistry';
 import type { Character } from '@shares/character/Character';
+import { Logger } from '../../core/utils/Logger';
 
 /**
  * 在线玩家信息
@@ -109,7 +111,7 @@ export class PlayerManager extends Singleton<PlayerManager>() {
 
     // 创建EntityNode以便添加组件
     // Create EntityNode for component management
-    const entityNode = new EntityNode(entity as GamePlayerEntity);
+    const entityNode = new EntityNode(entity as GameEntity);
 
     // 添加到在线玩家列表
     // Add to online players list
@@ -123,7 +125,7 @@ export class PlayerManager extends Singleton<PlayerManager>() {
 
     //添加角色 如果是readiness
     //todo:怪物不能显示到profileUI里
-    if (Settings.getCurrentScene() === GameScene.Readiness) {
+    if (Settings.getCurrentSceneType() === GameScene.Readiness) {
       const character = CharacterRegistry.getById(Settings.defaultCharacter)!;
       CharacterManager.instance.bindCharacter(
         entity.player.userId,
@@ -150,14 +152,15 @@ export class PlayerManager extends Singleton<PlayerManager>() {
     userId: string,
     playerData: IPlayerData
   ): Promise<void> {
-    const currentScene = Settings.getCurrentScene();
+    const currentSceneType = Settings.getCurrentSceneType();
+    const currentSceneName = Settings.getCurrentScene();
     const { currentGameMode } = Settings;
 
     console.log(
-      `[PlayerManager] Player ${userId} joining in scene: ${currentScene} (projectName: ${world.projectName})`
+      `[PlayerManager] Player ${userId} joining in scene: ${currentSceneName} (type: ${currentSceneType})`
     );
 
-    switch (currentScene) {
+    switch (currentSceneType) {
       case GameScene.Lobby:
         // Lobby场景：使用当前逻辑
         await this.handleLobbyJoin(entity, userId, playerData);
@@ -170,13 +173,13 @@ export class PlayerManager extends Singleton<PlayerManager>() {
 
       case GameScene.Ingame:
         // Ingame场景：暂时不处理
-        console.log(
+        Logger.log(
           `[PlayerManager] Player ${userId} joined during Ingame scene`
         );
         break;
 
       default:
-        console.warn(`[PlayerManager] Unknown scene: ${currentScene}`);
+        Logger.warn(`[PlayerManager] Unknown scene type: ${currentSceneType}`);
         break;
     }
   }
@@ -204,6 +207,126 @@ export class PlayerManager extends Singleton<PlayerManager>() {
   }
 
   /**
+   * Debug模式：自动分配角色
+   * 将所有在线玩家按顺序分配为Overseer和Survivor
+   * @param gameMode 游戏模式（决定Overseer数量）
+   * @returns 角色分配数据
+   */
+  private async getDebugRoleAssignment(
+    gameMode: GameMode
+  ): Promise<{ overseers: string[]; survivors: string[] }> {
+    // 获取所有在线玩家ID
+    const onlinePlayerIds = this.getOnlinePlayerIds();
+
+    // 根据游戏模式决定Survivor数量
+    const survivorCount = gameMode === GameMode.Small ? 4 : 8;
+
+    // 前N个玩家为Survivor，其余为
+    const survivors = onlinePlayerIds.slice(0, survivorCount);
+    const overseers = onlinePlayerIds.slice(survivorCount);
+
+    console.log(
+      `[PlayerManager] Debug模式角色分配 (${gameMode}):`,
+      `Survivors(${survivors.length}):`,
+      overseers,
+      `Overseers(${overseers.length}):`,
+      overseers
+    );
+
+    return { survivors, overseers };
+  }
+
+  /**
+   * 通过serverId获取matchId
+   * Get matchId from serverId mapping
+   * @returns matchId，如果不存在则返回null
+   */
+  private async getMatchIdFromServer(): Promise<string | null> {
+    const { serverId } = world;
+    console.log(`[PlayerManager] 当前serverId: ${serverId}`);
+
+    const serverMappingStorage =
+      storage.getGroupStorage<string>('server_to_match');
+
+    try {
+      const result = await serverMappingStorage.get(serverId);
+      const matchId = result?.value;
+
+      if (!matchId) {
+        console.warn(
+          `[PlayerManager] GroupStorage中未找到serverId映射: ${serverId}`
+        );
+        return null;
+      }
+
+      console.log(
+        `[PlayerManager] 找到matchId: ${matchId} (serverId: ${serverId})`
+      );
+
+      // 清除映射以释放内存
+      await serverMappingStorage.remove(serverId);
+      console.log(
+        `[PlayerManager] 已清除server_to_match映射 (serverId: ${serverId})`
+      );
+
+      return matchId;
+    } catch (error) {
+      console.error(`[PlayerManager] 获取matchId失败:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * 获取并清除角色分配数据
+   * Get and clear role assignment data from GroupStorage
+   * @param matchId 游戏matchId
+   * @returns 角色分配数据，如果不存在则返回null
+   */
+  private async getRoleAssignmentAndClear(matchId: string): Promise<{
+    overseers: string[];
+    survivors: string[];
+  } | null> {
+    console.log(`[PlayerManager] 读取角色分配数据 (matchId: ${matchId})`);
+
+    const roleAssignmentStorage = storage.getGroupStorage<{
+      overseers: string[];
+      survivors: string[];
+    }>('role_assignment');
+
+    try {
+      // 从GroupStorage读取
+      const result = await roleAssignmentStorage.get(matchId);
+      const roleData = result?.value;
+
+      if (!roleData) {
+        console.warn(
+          `[PlayerManager] GroupStorage中未找到角色分配数据 (matchId: ${matchId})`
+        );
+        return null;
+      }
+
+      console.log(
+        `[PlayerManager] 已从GroupStorage读取角色分配数据 (matchId: ${matchId}):`,
+        roleData
+      );
+
+      // 立即清除GroupStorage以防止内存溢出
+      await roleAssignmentStorage.remove(matchId);
+      console.log(
+        `[PlayerManager] 已清除role_assignment GroupStorage (matchId: ${matchId})，防止内存溢出`
+      );
+
+      return roleData;
+    } catch (error) {
+      console.error(
+        `[PlayerManager] 读取或清除角色分配数据失败 (matchId: ${matchId}):`,
+        error
+      );
+      return null;
+    }
+  }
+
+  /**
    * 处理Readiness场景玩家加入
    * 根据角色分配结果传送玩家到对应位置，并设置相机
    */
@@ -221,31 +344,47 @@ export class PlayerManager extends Singleton<PlayerManager>() {
       return;
     }
 
-    // 从GroupStorage获取角色分配结果
-    const roleAssignmentStorage = storage.getGroupStorage<{
-      overseers: string[];
-      survivors: string[];
-    }>('role_assignment');
+    // 获取当前场景名称
+    const currentSceneName = Settings.getCurrentScene();
+    console.log(
+      `[PlayerManager] 处理Readiness场景玩家加入，当前场景: ${currentSceneName}`
+    );
 
-    try {
-      // 假设使用matchPool的poolId作为key，这里简化处理，使用'current'
-      const result = await roleAssignmentStorage.get('current');
-      const roleData = result?.value;
+    let roleData: { survivors: string[]; overseers: string[] } | null = null;
 
-      if (!roleData) {
+    // Debug模式：直接分配角色而不从GroupStorage读取
+    if (Settings.debug) {
+      console.log('[PlayerManager] Debug模式：使用自动角色分配');
+      roleData = await this.getDebugRoleAssignment(gameMode);
+    } else {
+      // 生产模式：从GroupStorage读取
+      const matchId = await this.getMatchIdFromServer();
+      if (!matchId) {
         console.warn(
-          `[PlayerManager] No role assignment data found for player ${userId}`
+          `[PlayerManager] 无法获取matchId，可能serverId映射已被清除或不存在`
         );
         return;
       }
 
-      const { overseers, survivors } = roleData;
+      console.log(`[PlayerManager] 使用matchId: ${matchId}`);
+      roleData = await this.getRoleAssignmentAndClear(matchId);
+    }
+
+    if (!roleData) {
+      console.warn(
+        `[PlayerManager] No role assignment data found for player ${userId} in scene ${currentSceneName}`
+      );
+      return;
+    }
+
+    try {
+      const { survivors, overseers } = roleData;
 
       // 判断玩家是Overseer还是Survivor
-      const isOverseer = overseers.includes(userId);
       const isSurvivor = survivors.includes(userId);
+      const isOverseer = overseers.includes(userId);
 
-      if (!isOverseer && !isSurvivor) {
+      if (!isSurvivor && !isOverseer) {
         console.warn(
           `[PlayerManager] Player ${userId} not found in role assignment`
         );
@@ -282,7 +421,9 @@ export class PlayerManager extends Singleton<PlayerManager>() {
         const survivorIndex = survivors.indexOf(userId);
         characterIndex = survivorIndex;
         if (survivorIndex < playerPositions.length) {
-          entity.position = playerPositions[survivorIndex] as GameVector3;
+          entity.position.x = playerPositions[survivorIndex].x;
+          entity.position.y = playerPositions[survivorIndex].y;
+          entity.position.z = playerPositions[survivorIndex].z;
           console.log(
             `[PlayerManager] Survivor ${userId} teleported to player position (index: ${survivorIndex})`
           );
@@ -301,8 +442,11 @@ export class PlayerManager extends Singleton<PlayerManager>() {
       await this.setupPlayerController(
         userId,
         faction,
-        Settings.getCurrentScene()
+        Settings.getCurrentSceneType()
       );
+
+      // 添加 RoleController 组件（但不初始化，等待游戏开始事件）
+      await this.addRoleControllerComponent(userId);
     } catch (error) {
       console.error(
         `[PlayerManager] Failed to handle readiness join for ${userId}:`,
@@ -342,9 +486,6 @@ export class PlayerManager extends Singleton<PlayerManager>() {
         cameraController.initializeCamera(role, characterIndex);
         playerInfo.cameraController = cameraController;
 
-        // 设置监听客户端事件
-        this.setupCameraEventListeners(userId, cameraController);
-
         console.log(
           `[PlayerManager] Camera controller added for player ${userId} with character index ${characterIndex}`
         );
@@ -359,85 +500,6 @@ export class PlayerManager extends Singleton<PlayerManager>() {
         error
       );
     }
-  }
-
-  /**
-   * 设置相机事件监听器（监听客户端请求）
-   * Setup camera event listeners for client requests
-   */
-  private setupCameraEventListeners(
-    userId: string,
-    cameraController: CameraController
-  ): void {
-    const playerInfo = this.onlinePlayers.get(userId);
-    if (!playerInfo?.entity?.player) {
-      return;
-    }
-
-    const playerEntity = playerInfo.entity as GamePlayerEntity;
-    const eventBus = EventBus.instance;
-    const commMgr = CommunicationMgr.instance;
-
-    // 监听客户端请求切换角色视角
-    eventBus.on<{
-      characterIndex?: number;
-      isOverseer?: boolean;
-      _senderId?: string;
-    }>('readiness:camera:character', (data) => {
-      if (!data) {
-        return;
-      }
-
-      // 只处理发给当前玩家的事件
-      if (data._senderId !== userId) {
-        return;
-      }
-
-      console.log(
-        `[PlayerManager] Player ${userId} processing camera character view request:`,
-        data
-      );
-
-      // 如果客户端没有指定索引，使用CameraController的默认角色索引
-      const characterIndex =
-        data.characterIndex ?? cameraController.getDefaultCharacterIndex();
-      const isOverseer = data.isOverseer || false;
-
-      // 调用CameraController切换视角
-      cameraController.switchToCharacterView(characterIndex, isOverseer, () => {
-        // 镜头动画完成后，通知客户端显示UI
-        commMgr.sendTo(playerEntity, 'readiness:camera:complete', {
-          characterIndex,
-          isOverseer,
-        });
-        console.log(
-          `[PlayerManager] Camera animation complete for player ${userId}, index: ${characterIndex}`
-        );
-      });
-    });
-
-    // 监听客户端请求重置相机
-    eventBus.on<{ _senderId?: string }>('readiness:camera:reset', (data) => {
-      // 只处理发给当前玩家的事件
-      if (!data || data._senderId !== userId) {
-        return;
-      }
-
-      console.log(
-        `[PlayerManager] Player ${userId} processing camera reset request`
-      );
-      cameraController.resetToDefaultView(() => {
-        // reset动画完成后，通知客户端隐藏UI
-        commMgr.sendTo(playerEntity, 'readiness:camera:reset:complete', {
-          success: true,
-        });
-        console.log(
-          `[PlayerManager] Camera reset complete for player ${userId}`
-        );
-      });
-    });
-
-    console.log(`[PlayerManager] Camera event listeners setup for ${userId}`);
   }
 
   /**
@@ -480,7 +542,7 @@ export class PlayerManager extends Singleton<PlayerManager>() {
         error
       );
     }
-    if (scene === GameScene.Readiness) {
+    if (Settings.getCurrentSceneType() === GameScene.Readiness) {
       playerInfo.entityNode.getComponent(PlayerController)?.lockPlayer();
     }
   }
@@ -667,6 +729,77 @@ export class PlayerManager extends Singleton<PlayerManager>() {
    */
   public isPlayerOnline(userId: string): boolean {
     return this.onlinePlayers.has(userId);
+  }
+
+  /**
+   * 为玩家添加 RoleController 组件（不初始化）
+   * Add RoleController component to player (without initialization)
+   * @param userId 玩家ID / Player ID
+   * @returns 是否添加成功 / Whether the addition was successful
+   */
+  private async addRoleControllerComponent(userId: string): Promise<boolean> {
+    const playerInfo = this.onlinePlayers.get(userId);
+    if (!playerInfo) {
+      Logger.error(
+        `[PlayerManager] Cannot add RoleController: player info not found for ${userId}`
+      );
+      return false;
+    }
+
+    if (!playerInfo.entityNode) {
+      Logger.error(
+        `[PlayerManager] Cannot add RoleController: entityNode not found for ${userId}`
+      );
+      return false;
+    }
+
+    try {
+      // 检查是否已有 RoleController 组件
+      const existingController =
+        playerInfo.entityNode.getComponent(RoleController);
+      if (existingController) {
+        Logger.warn(
+          `[PlayerManager] RoleController already exists for player ${userId}`
+        );
+        return true;
+      }
+
+      // 添加 RoleController 组件
+      playerInfo.entityNode.addComponent(RoleController);
+
+      // 验证组件已添加
+      const roleController = playerInfo.entityNode.getComponent(RoleController);
+      if (roleController) {
+        Logger.log(
+          `[PlayerManager] ✅ RoleController component added for player ${userId} (awaiting initialization)`
+        );
+        return true;
+      } else {
+        Logger.error(
+          `[PlayerManager] Failed to get RoleController after adding for player ${userId}`
+        );
+        return false;
+      }
+    } catch (error) {
+      Logger.error(
+        `[PlayerManager] Error adding RoleController component to player ${userId}:`,
+        error
+      );
+      return false;
+    }
+  }
+
+  /**
+   * 检查玩家是否已有 RoleController 组件
+   * Check if player has RoleController component
+   * @param userId 玩家ID / Player ID
+   */
+  public hasRoleController(userId: string): boolean {
+    const playerInfo = this.onlinePlayers.get(userId);
+    if (!playerInfo?.entityNode) {
+      return false;
+    }
+    return playerInfo.entityNode.getComponent(RoleController) !== null;
   }
 
   /**

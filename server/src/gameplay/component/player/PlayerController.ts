@@ -13,6 +13,9 @@ export class PlayerController extends Component<GameEntity> {
   private faction: Faction | null = null;
   private initialized: boolean = false;
 
+  private baseWalkSpeed: number = 0;
+  private baseRunSpeed: number = 0;
+
   start() {
     // 组件启动时可以进行一些初始化
   }
@@ -41,6 +44,10 @@ export class PlayerController extends Component<GameEntity> {
       player.runSpeed = movementConfig.runSpeed;
       player.walkAcceleration = movementConfig.walkAcceleration;
       player.runAcceleration = movementConfig.runAcceleration;
+      player.jumpPower = movementConfig.jumpPower;
+      player.jumpSpeedFactor = movementConfig.jumpSpeedFactor;
+      this.baseWalkSpeed = movementConfig.walkSpeed;
+      this.baseRunSpeed = movementConfig.runSpeed;
 
       // 禁用跳跃
       player.enableJump = false;
@@ -213,6 +220,20 @@ export class PlayerController extends Component<GameEntity> {
 
     player.disableInputDirection = direction;
     console.log(`[PlayerController] Disabled input direction: ${direction}`);
+  }
+
+  /**
+   * 获取基础行走速度
+   */
+  public getBaseWalkSpeed(): number {
+    return this.baseWalkSpeed;
+  }
+
+  /**
+   * 获取基础跑步速度
+   */
+  public getBaseRunSpeed(): number {
+    return this.baseRunSpeed;
   }
 
   update(_deltaTime: number) {

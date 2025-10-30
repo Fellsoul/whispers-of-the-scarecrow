@@ -135,4 +135,113 @@ export class Animation {
   static async parallel(...animations: (() => Promise<void>)[]): Promise<void> {
     await Promise.all(animations.map((anim) => anim()));
   }
+
+  /**
+   * 渐入动画 (Fade In)
+   * 将元素的alpha或backgroundOpacity从当前值渐变到1（完全不透明）
+   * @param element 任何具有alpha或backgroundOpacity属性的UI元素
+   * @param duration 动画时长（毫秒）
+   * @param useBackground 是否使用backgroundOpacity（默认使用alpha）
+   */
+  static async fadeIn(
+    element: { alpha?: number; backgroundOpacity?: number },
+    duration: number,
+    useBackground: boolean = false
+  ): Promise<void> {
+    const startTime = Date.now();
+    const endTime = startTime + duration;
+
+    // 选择使用哪个属性
+    const propName = useBackground ? 'backgroundOpacity' : 'alpha';
+
+    // 获取当前透明度值，默认为0
+    const startOpacity = (element as Record<string, number>)[propName] ?? 0;
+    const targetOpacity = 1;
+    const deltaOpacity = targetOpacity - startOpacity;
+
+    while (Date.now() < endTime) {
+      const progress = (Date.now() - startTime) / duration;
+      const ease = easeInOutQuad(progress);
+      (element as Record<string, number>)[propName] =
+        startOpacity + deltaOpacity * ease;
+      await waitNextFrame();
+    }
+
+    // 确保最终透明度精确
+    (element as Record<string, number>)[propName] = targetOpacity;
+  }
+
+  /**
+   * 渐出动画 (Fade Out)
+   * 将元素的alpha或backgroundOpacity从当前值渐变到0（完全透明）
+   * @param element 任何具有alpha或backgroundOpacity属性的UI元素
+   * @param duration 动画时长（毫秒）
+   * @param useBackground 是否使用backgroundOpacity（默认使用alpha）
+   */
+  static async fadeOut(
+    element: { alpha?: number; backgroundOpacity?: number },
+    duration: number,
+    useBackground: boolean = false
+  ): Promise<void> {
+    const startTime = Date.now();
+    const endTime = startTime + duration;
+
+    // 选择使用哪个属性
+    const propName = useBackground ? 'backgroundOpacity' : 'alpha';
+
+    // 获取当前透明度值，默认为1
+    const startOpacity = (element as Record<string, number>)[propName] ?? 1;
+    const targetOpacity = 0;
+    const deltaOpacity = targetOpacity - startOpacity;
+
+    while (Date.now() < endTime) {
+      const progress = (Date.now() - startTime) / duration;
+      const ease = easeInOutQuad(progress);
+      (element as Record<string, number>)[propName] =
+        startOpacity + deltaOpacity * ease;
+      await waitNextFrame();
+    }
+
+    // 确保最终透明度精确
+    (element as Record<string, number>)[propName] = targetOpacity;
+  }
+
+  /**
+   * 黑幕过渡动画序列
+   * 渐入 -> 停留 -> 渐出
+   * @param element 黑幕UI元素
+   * @param fadeInDuration 渐入时长（毫秒）
+   * @param holdDuration 停留时长（毫秒）
+   * @param fadeOutDuration 渐出时长（毫秒）
+   * @param useBackground 是否使用backgroundOpacity（默认使用alpha）
+   */
+  static async transitionOverlay(
+    element: { alpha?: number; backgroundOpacity?: number; visible: boolean },
+    fadeInDuration: number,
+    holdDuration: number,
+    fadeOutDuration: number,
+    useBackground: boolean = false
+  ): Promise<void> {
+    // 确保元素可见
+    element.visible = true;
+
+    // 设置初始透明度为0
+    if (useBackground) {
+      (element as Record<string, number>).backgroundOpacity = 0;
+    } else {
+      (element as Record<string, number>).alpha = 0;
+    }
+
+    // 渐入
+    await Animation.fadeIn(element, fadeInDuration, useBackground);
+
+    // 停留
+    await Animation.delay(holdDuration);
+
+    // 渐出
+    await Animation.fadeOut(element, fadeOutDuration, useBackground);
+
+    // 隐藏元素
+    element.visible = false;
+  }
 }

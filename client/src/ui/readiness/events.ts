@@ -28,6 +28,9 @@ export const UI_ENTER_SCROLL_VIEW = 'ui:readiness:enter:scroll';
 /** UI事件：离开卷轴视图 */
 export const UI_LEAVE_SCROLL_VIEW = 'ui:readiness:leave:scroll';
 
+/** UI事件：角色切换完成（本地事件，用于通知其他模块更新） */
+export const UI_CHARACTER_CHANGED = 'ui:readiness:character:changed';
+
 // ==================== 前后端通信事件 ====================
 
 /** 网关事件：玩家准备状态（C->S） */
@@ -38,6 +41,9 @@ export const GW_REQUEST_CAMERA_RESET = 'readiness:camera:reset';
 
 /** 网关事件：请求切换角色视角（C->S） */
 export const GW_REQUEST_CHARACTER_VIEW = 'readiness:camera:character';
+
+/** 网关事件：角色切换通知（C->S） */
+export const GW_CHARACTER_CHANGED = 'readiness:character:changed';
 
 /** 网关事件：准备快照（S->C） */
 export const GW_READINESS_SNAPSHOT = 'readiness:snapshot';
@@ -102,4 +108,18 @@ export interface CameraCompletePayload {
   characterIndex: number;
   /** 是否是Overseer角色 */
   isOverseer: boolean;
+}
+
+/**
+ * 角色切换完成载荷（本地事件）
+ */
+export interface CharacterChangedPayload {
+  /** 用户ID */
+  userId?: string;
+  /** 角色ID */
+  characterId: string;
+  /** 角色名称 */
+  characterName: string;
+  /** 角色昵称 */
+  characterNickname: string;
 }

@@ -50,9 +50,9 @@ export class ScrollAnimator {
     try {
       // 竖向滑动：next向下滑出，prev向上滑出
       const exitY =
-        direction === 'next' ? this.config.offscreenX : -this.config.offscreenX;
-      const enterY =
         direction === 'next' ? -this.config.offscreenX : this.config.offscreenX;
+      const enterY =
+        direction === 'next' ? this.config.offscreenX : -this.config.offscreenX;
 
       // 第一阶段：滑出到离屏位置
       await this.animateTransform(
