@@ -27,6 +27,8 @@ export enum NoiseTag {
   SearchRustle = 'SearchRustle',
   IncubatorPulse = 'IncubatorPulse',
   CarveChip = 'CarveChip',
+  WaxBubble = 'WaxBubble', // 熬蜡气泡声
+  IgniteFlare = 'IgniteFlare', // 点火火焰声
   LightFlicker = 'LightFlicker',
   AltarHum = 'AltarHum',
   TrapSnap = 'TrapSnap',

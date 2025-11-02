@@ -86,11 +86,24 @@ export class IngameProfileManager extends Singleton<IngameProfileManager>() {
       }
 
       console.log(
-        `[IngameProfileManager] Player ${userId} changed character to ${eventData.characterId}`
+        `[IngameProfileManager] Player ${userId} requested character change to ${eventData.characterId}`
       );
+
+      // 检查当前玩家的角色，如果是 Overseer 则拒绝切换
+      const currentState = this.charMgr.getCharacterState(userId);
+      if (currentState && currentState.character.faction === 'Overseer') {
+        console.log(
+          `[IngameProfileManager] ⛔ Rejected character change for Overseer ${userId} - Overseers cannot switch characters`
+        );
+        return;
+      }
 
       // 更新CharacterManager中的角色ID（如果需要）
       this.charMgr.updateCharacterId(userId, eventData.characterId);
+
+      console.log(
+        `[IngameProfileManager] ✅ Character changed for ${userId} to ${eventData.characterId}`
+      );
 
       // 广播给所有客户端
       this.broadcastProfileUpdate(userId);
@@ -131,6 +144,18 @@ export class IngameProfileManager extends Singleton<IngameProfileManager>() {
       return;
     }
 
+    console.log(
+      `[IngameProfileManager] Checking player ${userId}: characterId=${state.character.id}, characterName=${state.character.name}, faction=${state.character.faction}`
+    );
+
+    // 检查角色是否为 Overseer，如果是则不广播到顶部栏
+    if (state.character.faction === 'Overseer') {
+      console.log(
+        `[IngameProfileManager] ⛔ Skipping profile broadcast for Overseer ${userId} (${state.character.name})`
+      );
+      return;
+    }
+
     const profileData = {
       userId: state.userId,
       playerName: state.entity.player?.name || 'Unknown',
@@ -147,7 +172,7 @@ export class IngameProfileManager extends Singleton<IngameProfileManager>() {
     this.commMgr.sendBroad('ingame:profile:update', profileData);
 
     console.log(
-      `[IngameProfileManager] Broadcast profile update for ${userId}`
+      `[IngameProfileManager] ✅ Broadcast profile update for Survivor ${userId} (${state.character.name})`
     );
   }
 
@@ -156,21 +181,69 @@ export class IngameProfileManager extends Singleton<IngameProfileManager>() {
    */
   public broadcastAllProfiles(): void {
     const allStates = this.charMgr.getAllCharacterStates();
-    const profiles = allStates.map((state) => ({
-      userId: state.userId,
-      playerName: state.entity.player?.name || 'Unknown',
-      avatar: state.entity.player?.avatar || '', // 玩家头像
-      characterId: state.character.id,
-      currentHP: state.currentHP,
-      maxHP: state.maxHP,
-      isAlive: state.isAlive,
-      carryingItem: undefined, // TODO: 从PlayerController获取
-      statusEffects: state.statusEffects.map((e) => e.id),
-    }));
+    
+    console.log(`[IngameProfileManager] Broadcasting all profiles:`);
+    allStates.forEach((state) => {
+      console.log(
+        `  - ${state.userId}: characterId=${state.character.id}, characterName=${state.character.name}, faction=${state.character.faction}`
+      );
+    });
+    
+    // 过滤掉 Overseer 角色
+    const profiles = allStates
+      .filter((state) => {
+        const isOverseer = state.character.faction === 'Overseer';
+        return !isOverseer;
+      })
+      .map((state) => ({
+        userId: state.userId,
+        playerName: state.entity.player?.name || 'Unknown',
+        avatar: state.entity.player?.avatar || '', // 玩家头像
+        characterId: state.character.id,
+        currentHP: state.currentHP,
+        maxHP: state.maxHP,
+        isAlive: state.isAlive,
+        carryingItem: undefined, // TODO: 从PlayerController获取
+        statusEffects: state.statusEffects.map((e) => e.id),
+      }));
 
     this.commMgr.sendBroad('ingame:profiles:batch', profiles);
 
-    console.log(`[IngameProfileManager] Broadcast ${profiles.length} profiles`);
+    // 发送每个玩家自己的 userId 给他们各自的客户端
+    console.log(
+      `[IngameProfileManager] About to send userId to ${allStates.length} players`
+    );
+    
+    allStates.forEach((state, index) => {
+      console.log(
+        `[IngameProfileManager] Processing state ${index}: userId=${state.userId}, hasEntity=${!!state.entity}, hasPlayer=${!!state.entity.player}`
+      );
+      
+      const playerEntity = state.entity;
+      if (playerEntity && playerEntity.player) {
+        try {
+          this.commMgr.sendTo(playerEntity, 'client:userId:set', {
+            userId: state.userId,
+          });
+          console.log(
+            `[IngameProfileManager] ✅ Sent userId ${state.userId} to client (player: ${playerEntity.player.name})`
+          );
+        } catch (error) {
+          console.error(
+            `[IngameProfileManager] ❌ Failed to send userId ${state.userId}:`,
+            error
+          );
+        }
+      } else {
+        console.warn(
+          `[IngameProfileManager] ⚠️ Cannot send userId ${state.userId} - missing entity or player`
+        );
+      }
+    });
+
+    console.log(
+      `[IngameProfileManager] ✅ Broadcast ${profiles.length} Survivor profiles (${allStates.length - profiles.length} Overseer(s) filtered)`
+    );
   }
 
   /**

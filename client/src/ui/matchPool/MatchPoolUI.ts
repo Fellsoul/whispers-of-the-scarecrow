@@ -164,7 +164,7 @@ export class MatchPoolUI {
     // 如果正在倒计时
     if (data.isStarting && data.countdownSeconds > 0) {
       const seconds = Math.floor(data.countdownSeconds / 1000);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       this.updatePlayerCountText(
         `${seconds}s ${i18n.t('matchpool.countdown' as any)}`
       );

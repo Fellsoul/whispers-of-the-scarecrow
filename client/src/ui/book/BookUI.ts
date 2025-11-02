@@ -247,7 +247,7 @@ export class BookUI {
       // 设置 UI 交互
       this.setupUIInteractions();
 
-      // 初始状态：bookInvisible（只显示 icon）
+      // 初始状态：隐藏封面和打开的书本，只显示 icon
       this.showBookInvisible();
 
       // 初始化书本封面文本
@@ -326,6 +326,18 @@ export class BookUI {
       this.updateBookCoverTexts();
       // 更新书签文本
       this.updateBookmarkLabels();
+    });
+
+    // 监听场景模式变化事件
+    this.eventBus.on<{ sceneMode: string }>('server:scenemode:changed', (data) => {
+      if (data?.sceneMode === 'ingame') {
+        // 进入 ingame 场景时隐藏 bookIcon
+        const bookIcon = this.getBookIcon();
+        if (bookIcon) {
+          bookIcon.visible = false;
+          console.log('[BookUI] 📖 Book icon hidden (entered ingame mode)');
+        }
+      }
     });
 
     // 监听页面变化事件
@@ -2434,6 +2446,31 @@ export class BookUI {
       bookIcon.visible = visible;
       bookIcon.imageOpacity = visible ? 1 : 0;
       console.log(`[BookUI] Set bookIcon visibility: ${visible}`);
+    }
+  }
+
+  /**
+   * 设置书本封面可见性（用于场景切换）
+   * @param visible 是否可见
+   */
+  setBookCoverVisible(visible: boolean): void {
+    if (!this.uiScreen) {
+      console.warn('[BookUI] UI screen not initialized');
+      return;
+    }
+
+    const bookBgClosed = this.uiScreen.uiImage_bookBgClosed;
+    if (bookBgClosed) {
+      bookBgClosed.visible = visible;
+      bookBgClosed.imageOpacity = visible ? 1 : 0;
+      console.log(`[BookUI] Set bookBgClosed visibility: ${visible}`);
+    }
+
+    // 同时处理 bookIcon（封面显示时，icon隐藏）
+    const bookIcon = this.getBookIcon();
+    if (bookIcon) {
+      bookIcon.visible = !visible;
+      bookIcon.imageOpacity = visible ? 0 : 1;
     }
   }
 

@@ -24,7 +24,7 @@ export class CommunicationMgr extends Singleton<CommunicationMgr>() {
    * @param data 消息数据
    */
   send<T>(topic: string, data: T): void {
-    console.log(`[Client SEND] Topic: ${topic}`);
+
     remoteChannel.sendServerEvent({ topic, data });
   }
 
@@ -38,6 +38,12 @@ export class CommunicationMgr extends Singleton<CommunicationMgr>() {
       // The server sends { topic, data } directly, not wrapped in args
       const topic = event.topic || event.args?.topic;
       const data = event.data || event.args?.data;
+      
+      // 调试日志：显示关键事件
+      if (topic === 'client:userId:set' || topic === 'ingame:profiles:batch') {
+        console.log(`[Client RECEIVE] Topic: ${topic}`, data);
+      }
+      
       // 使用 EventEmitter 将事件在客户端内部广播
       if (topic) {
         EventBus.instance.emit(topic, data);

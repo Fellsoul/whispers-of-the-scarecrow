@@ -1,5 +1,5 @@
 // 本文件由ArenaPro工具自动生成，请勿手动修改
-// 生成时间: 2025年10月29日星期三 GMT-6 22:11:29
+// 生成时间: 2025年11月2日星期日 GMT-7 14:16:56
 
 /**
  * ClientUIWindow 是所有 UiIndex_XXX 屏幕索引类的基类。
@@ -21,9 +21,7 @@ export default class ClientUIWindow {
   /** 以完整路径为键的元素缓存表 */
   protected __cache: Record<string, UiElement | UiScreen | undefined> = {};
   /** 与 __paths 对齐的元信息 */
-  private __meta?: ReadonlyArray<
-    Readonly<{ path: string; type: UiKind; name: string }>
-  >;
+  private __meta?: ReadonlyArray<Readonly<{ path: string; type: UiKind; name: string }>>;
 
   /**
    * @param ui 目标屏幕实例
@@ -76,18 +74,8 @@ export default class ClientUIWindow {
   /**
    * 获取当前屏幕的 Meta 列表。
    */
-  public getMeta(): ReadonlyArray<{
-    path: string;
-    type: UiKind;
-    name: string;
-  }> {
-    return (
-      (this.__meta as ReadonlyArray<{
-        path: string;
-        type: UiKind;
-        name: string;
-      }>) || []
-    );
+  public getMeta(): ReadonlyArray<{ path: string; type: UiKind; name: string }> {
+    return (this.__meta as ReadonlyArray<{ path: string; type: UiKind; name: string }>) || [];
   }
 
   /**
@@ -101,7 +89,7 @@ export default class ClientUIWindow {
    *
    * // 类型 + 条件：此时 el 被收窄为 UiImage | undefined
    * const imgs = idx?.findBy('UiImage', (meta, el) => meta.name === "img_1" && el?.visible === true);
-   *
+   * 
    * // 不指定类型
    * const hits = idx?.findBy((meta, el) => meta.name.includes('btn'));
    */
@@ -112,9 +100,7 @@ export default class ClientUIWindow {
       /** UI元素 */
       el: UiElement | undefined
     ) => boolean
-  ):
-    | Array<{ path: string; name: string; el: UiElement | undefined }>
-    | undefined;
+  ): Array<{ path: string; name: string; el: UiElement | undefined }> | undefined;
   public findBy<K extends UiKind>(
     /** 指定UI类型 */
     kind: K,
@@ -122,42 +108,30 @@ export default class ClientUIWindow {
       /** 元数据 */
       meta: Readonly<{ path: string; name: string }>,
       /** 指定后的UI元素 */
-      el:
-        | (K extends 'UiBox'
-            ? UiBox
-            : K extends 'UiImage'
-              ? UiImage
-              : K extends 'UiInput'
-                ? UiInput
-                : K extends 'UiScrollBox'
-                  ? UiScrollBox
-                  : K extends 'UiText'
-                    ? UiText
-                    : UiElement)
-        | undefined
+      el: (
+        K extends 'UiBox' ? UiBox :
+        K extends 'UiImage' ? UiImage :
+        K extends 'UiInput' ? UiInput :
+        K extends 'UiScrollBox' ? UiScrollBox :
+        K extends 'UiText' ? UiText :
+        UiElement
+      ) | undefined
     ) => boolean
-  ):
-    | Array<{
-        /** 元素路径*/
-        path: string;
-        /** 节点名称*/
-        name: string;
-        /** UI元素 */
-        el:
-          | (K extends 'UiBox'
-              ? UiBox
-              : K extends 'UiImage'
-                ? UiImage
-                : K extends 'UiInput'
-                  ? UiInput
-                  : K extends 'UiScrollBox'
-                    ? UiScrollBox
-                    : K extends 'UiText'
-                      ? UiText
-                      : UiElement)
-          | undefined;
-      }>
-    | undefined;
+  ): Array<{
+    /** 元素路径*/
+    path: string;
+    /** 节点名称*/
+    name: string;
+    /** UI元素 */
+    el: (
+      K extends 'UiBox' ? UiBox :
+      K extends 'UiImage' ? UiImage :
+      K extends 'UiInput' ? UiInput :
+      K extends 'UiScrollBox' ? UiScrollBox :
+      K extends 'UiText' ? UiText :
+      UiElement
+    ) | undefined;
+  }> | undefined;
 
   // 实现体
   public findBy(
@@ -165,38 +139,24 @@ export default class ClientUIWindow {
     kindOrPredicate: any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     maybePredicate?: any
-  ):
-    | Array<{ path: string; name: string; el: UiElement | undefined }>
-    | undefined {
-    const out: Array<{
-      path: string;
-      name: string;
-      el: UiElement | undefined;
-    }> = [];
+  ): Array<{ path: string; name: string; el: UiElement | undefined }> | undefined {
+    const out: Array<{ path: string; name: string; el: UiElement | undefined }> = [];
     const paths = this.__paths || [];
     const hasKind = typeof kindOrPredicate === 'string';
-    const kind: UiKind | undefined = hasKind
-      ? (kindOrPredicate as UiKind)
-      : undefined;
-    const predicate: (
-      m: Readonly<{ path: string; name: string }>,
-      e: UiElement | undefined
-    ) => boolean = hasKind ? (maybePredicate ?? (() => true)) : kindOrPredicate;
+    const kind: UiKind | undefined = hasKind ? kindOrPredicate as UiKind : undefined;
+    const predicate: (m: Readonly<{ path: string; name: string }>, e: UiElement | undefined) => boolean =
+      hasKind ? (maybePredicate ?? (() => true)) : kindOrPredicate;
 
     for (let i = 0; i < paths.length; i++) {
       const p = paths[i] as string;
-      const meta = (this.__meta?.[i] ?? {
-        path: p,
-        type: 'UiBox',
-        name: p.split('/').pop() || p,
-      }) as Readonly<{
+      const meta = (this.__meta?.[i] ?? { path: p, type: 'UiBox', name: p.split('/').pop() || p }) as Readonly<{
         path: string;
         type: UiKind;
         name: string;
       }>;
       if (kind && meta.type !== kind) {
         continue;
-      }
+      };
       const el = this.__cache[p] as UiElement | undefined;
       if (predicate(meta, el)) {
         out.push({ ...meta, el });

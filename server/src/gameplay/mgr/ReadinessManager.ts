@@ -71,18 +71,16 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
    * 初始化准备场景管理器
    */
   public initialize(): void {
-    Logger.log('[ReadinessManager] Initializing...');
-
+    
     // 订阅客户端事件
     this.subscribeClientEvents();
-
+    
     // 开始倒计时
     this.startCountdown();
-
+    
     // 开始定期广播快照
     this.startSnapshotBroadcast();
-
-    Logger.log('[ReadinessManager] Initialized successfully');
+    
   }
 
   /**
@@ -91,31 +89,17 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
   private subscribeClientEvents(): void {
     // 监听玩家准备状态变化
     this.eventBus.on('readiness:player:state', (data: unknown) => {
-      const eventData = data as {
-        isReady: boolean;
-        characterId: string;
-        _senderEntity?: GameEntity;
-      };
+      const eventData = data as { isReady: boolean; characterId: string; _senderEntity?: GameEntity };
       const userId = eventData._senderEntity?.player?.userId;
-
+      
       if (!userId) {
-        Logger.warn(
-          '[ReadinessManager] Ready state event without valid userId'
-        );
+        Logger.warn('[ReadinessManager] Ready state event without valid userId');
         return;
       }
 
-      Logger.log(
-        `[ReadinessManager] Received ready state from player ${userId}: ${eventData.isReady ? 'READY' : 'NOT READY'}`
-      );
-      this.handlePlayerReadyStateChange(
-        userId,
-        eventData.isReady,
-        eventData.characterId
-      );
+      this.handlePlayerReadyStateChange(userId, eventData.isReady, eventData.characterId);
     });
 
-    Logger.log('[ReadinessManager] Client events subscribed');
   }
 
   /**
@@ -130,9 +114,6 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
     characterId: string
   ): void {
     if (this.isGameStarted) {
-      Logger.log(
-        `[ReadinessManager] Game already started, ignoring ready state change for ${userId}`
-      );
       return;
     }
 
@@ -145,16 +126,11 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
 
     this.playerReadyStates.set(userId, state);
 
-    Logger.log(
-      `[ReadinessManager] Player ${userId} ready state changed: ${isReady ? 'READY' : 'NOT READY'} (Character: ${characterId}) | Total tracked players: ${this.playerReadyStates.size}`
-    );
-
     // 立即广播一次快照
     this.broadcastSnapshot();
 
     // 检查是否所有人都准备好
     if (this.checkAllReady()) {
-      Logger.log('[ReadinessManager] All players ready, forcing game start');
       this.forceGameStart();
     }
   }
@@ -171,9 +147,6 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
     this.isCountingDown = true;
     this.countdownRemaining = this.COUNTDOWN_DURATION;
 
-    Logger.log(
-      `[ReadinessManager] Countdown started: ${this.countdownRemaining / 1000}s`
-    );
 
     // 使用setInterval每秒更新倒计时
     this.countdownTimer = setInterval(() => {
@@ -194,17 +167,15 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
       this.countdownTimer = null;
     }
     this.isCountingDown = false;
-    Logger.log('[ReadinessManager] Countdown stopped');
   }
 
   /**
    * 倒计时结束处理
    */
   private onCountdownEnd(): void {
-    Logger.log('[ReadinessManager] Countdown ended, starting game');
     this.stopCountdown();
     this.countdownRemaining = 0;
-
+    
     // 触发游戏开始
     this.startGame();
   }
@@ -219,7 +190,6 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
       this.broadcastSnapshot();
     }, this.SNAPSHOT_INTERVAL);
 
-    Logger.log('[ReadinessManager] Snapshot broadcast started');
   }
 
   /**
@@ -230,7 +200,6 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
       clearInterval(this.snapshotTimer);
       this.snapshotTimer = null;
     }
-    Logger.log('[ReadinessManager] Snapshot broadcast stopped');
   }
 
   /**
@@ -262,7 +231,7 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
     let count = 0;
     const readyPlayers: string[] = [];
     const notReadyPlayers: string[] = [];
-
+    
     for (const [userId, state] of this.playerReadyStates) {
       if (state.isReady) {
         count++;
@@ -271,10 +240,7 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
         notReadyPlayers.push(userId);
       }
     }
-
-    Logger.log(
-      `[ReadinessManager] Prepared count: ${count}/${this.playerReadyStates.size} | Ready: [${readyPlayers.join(', ')}] | Not Ready: [${notReadyPlayers.join(', ')}]`
-    );
+    
     return count;
   }
 
@@ -282,11 +248,10 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
    * 检查是否所有人都准备好
    */
   private checkAllReady(): boolean {
-    const totalPlayers = this.playerMgr.getOnlinePlayerCount();
     const preparedPlayers = this.getPreparedPlayerCount();
 
     // 至少需要1个玩家，且所有人都准备好
-    return totalPlayers > 0 && preparedPlayers === totalPlayers;
+    return preparedPlayers === 5;
   }
 
   /**
@@ -297,7 +262,6 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
       return;
     }
 
-    Logger.log('[ReadinessManager] Forcing game start - all players ready');
     this.stopCountdown();
     this.startGame();
   }
@@ -314,14 +278,6 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
 
     this.isGameStarted = true;
 
-    Logger.log('[ReadinessManager] ========== GAME START ==========');
-    Logger.log(
-      `[ReadinessManager] Total players: ${this.playerMgr.getOnlinePlayerCount()}`
-    );
-    Logger.log(
-      `[ReadinessManager] Ready players: ${this.getPreparedPlayerCount()}`
-    );
-
     // 停止快照广播
     this.stopSnapshotBroadcast();
 
@@ -332,8 +288,6 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
       holdDuration: 2000, // 黑幕停留时长
       fadeOutDuration: 1000, // 黑幕渐隐时长
     });
-
-    Logger.log('[ReadinessManager] Sent game start transition to all clients');
 
     // 延迟触发服务端游戏初始化（在黑幕显示完成后）
     setTimeout(() => {
@@ -347,11 +301,43 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
   private triggerServerGameInitialization(): void {
     Logger.log('[ReadinessManager] Triggering server game initialization');
 
+    // 获取所有在线玩家ID
+    const onlinePlayerIds = this.playerMgr.getOnlinePlayerIds();
+    Logger.log(`[ReadinessManager] Found ${onlinePlayerIds.length} online players`);
+
+    // 构建完整的玩家状态列表（包括未准备的玩家）
+    const allPlayerStates: PlayerReadyState[] = onlinePlayerIds.map((userId) => {
+      // 如果玩家在 playerReadyStates 中，使用其状态
+      const existingState = this.playerReadyStates.get(userId);
+      if (existingState) {
+        Logger.log(`[ReadinessManager] Player ${userId}: Using existing state (Ready: ${existingState.isReady}, Character: ${existingState.characterId})`);
+        return existingState;
+      }
+
+      // 否则，创建一个默认状态（未准备）
+      // 从 CharacterManager 获取玩家的角色信息
+      const characterState = this.charMgr.getCharacterState(userId);
+      const characterId = characterState?.character.id || 'char_survivor_01'; // 默认角色
+
+      const defaultState: PlayerReadyState = {
+        userId,
+        isReady: false, // 默认未准备
+        characterId,
+        readyTime: 0,
+      };
+
+      Logger.log(`[ReadinessManager] Player ${userId}: Creating default state (Character: ${characterId}) - NOT READY`);
+      return defaultState;
+    });
+
+    Logger.log(`[ReadinessManager] Total player states: ${allPlayerStates.length}`);
+    Logger.log(`[ReadinessManager] Ready players: ${this.getPreparedPlayerCount()}`);
+
     // 触发内部游戏开始事件（GameManager监听此事件）
     this.eventBus.emit('game:start', {
-      totalPlayers: this.playerMgr.getOnlinePlayerCount(),
+      totalPlayers: onlinePlayerIds.length,
       readyPlayers: this.getPreparedPlayerCount(),
-      playerStates: Array.from(this.playerReadyStates.values()),
+      playerStates: allPlayerStates,
     });
 
     Logger.log('[ReadinessManager] Game start event emitted to GameManager');
@@ -376,17 +362,15 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
    * 重置管理器状态
    */
   public reset(): void {
-    Logger.log('[ReadinessManager] Resetting...');
-
+    
     this.stopCountdown();
     this.stopSnapshotBroadcast();
-
+    
     this.playerReadyStates.clear();
     this.countdownRemaining = 0;
     this.isCountingDown = false;
     this.isGameStarted = false;
-
-    Logger.log('[ReadinessManager] Reset complete');
+    
   }
 
   /**
@@ -394,9 +378,9 @@ export class ReadinessManager extends Singleton<ReadinessManager>() {
    */
   public dispose(): void {
     Logger.log('[ReadinessManager] Disposing...');
-
+    
     this.reset();
-
+    
     Logger.log('[ReadinessManager] Disposed');
   }
 }

@@ -13,6 +13,7 @@ import {
   lilianNoble,
   sebastianMoore,
 } from '../role';
+import { PlayerManager } from './PlayerManager';
 
 /**
  * 玩家角色运行时状态
@@ -125,6 +126,27 @@ export class CharacterManager extends Singleton<CharacterManager>() {
   }
 
   /**
+   * 根据玩家ID获取角色类实例
+   * @param userId 玩家ID
+   * @returns 角色类实例
+   */
+  public getRoleInstanceByUserId(userId: string): SurvivorRoleBase | null {
+    const state = this.characterStates.get(userId);
+    if (!state) {
+      console.warn(`[CharacterManager] Character state not found for user: ${userId}`);
+      return null;
+    }
+
+    // 如果 state.role 已经存在，直接返回
+    if (state.role) {
+      return state.role as SurvivorRoleBase;
+    }
+
+    // 否则，根据 characterId 获取
+    return this.getRoleInstance(state.character.id);
+  }
+
+  /**
    * 获取所有可用的角色类
    */
   public getAllRoleInstances(): { [key: string]: SurvivorRoleBase } {
@@ -134,6 +156,49 @@ export class CharacterManager extends Singleton<CharacterManager>() {
       char_survivor_03: lilianNoble,
       char_survivor_04: sebastianMoore,
     };
+  }
+
+  /**
+   * 从所有玩家的 RoleController 组件中同步角色实例
+   * 这个方法应该在游戏开始（ingame）时调用
+   */
+  public syncRoleInstancesFromPlayers(): void {
+    console.log('[CharacterManager] Syncing role instances from all players...');
+    
+    let syncCount = 0;
+    
+    for (const [userId, state] of this.characterStates) {
+      // 获取玩家信息
+      const playerInfo = PlayerManager.instance.getOnlinePlayer(userId);
+      if (!playerInfo || !playerInfo.entityNode) {
+        console.warn(`[CharacterManager] Cannot sync role for user ${userId}: player not found`);
+        continue;
+      }
+
+      // 尝试从 RoleController 组件获取角色实例
+      try {
+        // 动态导入 RoleController 类型（避免循环依赖）
+        const roleController = playerInfo.entityNode.getComponent('RoleController');
+        if (!roleController) {
+          console.warn(`[CharacterManager] No RoleController found for user ${userId}`);
+          continue;
+        }
+
+        // 获取 role 实例（RoleController 有 getRoleInstance() 方法）
+        const roleInstance = (roleController as any).getRoleInstance?.();
+        if (roleInstance) {
+          state.role = roleInstance;
+          syncCount++;
+          console.log(`[CharacterManager] Synced role for user ${userId}: ${roleInstance.displayName}`);
+        } else {
+          console.warn(`[CharacterManager] RoleController for user ${userId} has no role instance yet`);
+        }
+      } catch (error) {
+        console.error(`[CharacterManager] Error syncing role for user ${userId}:`, error);
+      }
+    }
+
+    console.log(`[CharacterManager] Role sync complete: ${syncCount}/${this.characterStates.size} players synced`);
   }
 
   /**
@@ -173,6 +238,46 @@ export class CharacterManager extends Singleton<CharacterManager>() {
     };
 
     this.characterStates.set(userId, state);
+
+    // 设置玩家皮肤
+    if (character.skinName && entity.player) {
+      try {
+        entity.player.setSkinByName(character.skinName);
+        console.log(
+          `[CharacterManager] Set skin '${character.skinName}' for player ${userId}`
+        );
+      } catch (error) {
+        console.warn(
+          `[CharacterManager] Failed to set skin '${character.skinName}' for player ${userId}:`,
+          error
+        );
+      }
+    }
+
+    // 为 Overseer 装备镰刀
+    if (character.faction === 'Overseer' && entity.player) {
+      try {
+        const scythe = entity.player.addWearable({
+          mesh: 'mesh/scythe.vb',
+          bodyPart: GameBodyPart.RIGHT_HAND,
+          offset: new GameVector3(0, 0, 0),
+          orientation: new GameQuaternion(0, 0, 0, 1),
+          scale: new GameVector3(1, 1, 1),
+        });
+        
+        // 存储镰刀引用到角色状态
+        (state as any).scytheWearable = scythe;
+        
+        console.log(
+          `[CharacterManager] Equipped scythe for Overseer ${userId}`
+        );
+      } catch (error) {
+        console.warn(
+          `[CharacterManager] Failed to equip scythe for Overseer ${userId}:`,
+          error
+        );
+      }
+    }
 
     console.log(
       `[CharacterManager] Bound character ${character.name} to player ${userId}, HP: ${maxHP}`
@@ -214,6 +319,18 @@ export class CharacterManager extends Singleton<CharacterManager>() {
     // 更新角色数据（保留HP、状态等运行时数据）
     state.character = newCharacter;
     state.lastUpdateTime = Date.now();
+
+    // 设置玩家皮肤
+    if (newCharacter.skinName && state.entity.player) {
+      try {
+        state.entity.player.setSkinByName(newCharacter.skinName);
+      } catch (error) {
+        console.warn(
+          `[CharacterManager] Failed to set skin '${newCharacter.skinName}' for player ${userId}:`,
+          error
+        );
+      }
+    }
 
     console.log(
       `[CharacterManager] Updated character for player ${userId} to ${newCharacter.name}`

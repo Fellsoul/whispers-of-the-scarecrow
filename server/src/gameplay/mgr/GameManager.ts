@@ -11,7 +11,9 @@ import { IngameProfileManager } from './IngameProfileManager';
 import { CharacterManager } from './CharacterManager';
 import { ReadinessManager } from './ReadinessManager';
 import { IngameManager } from './IngameManager';
+import { ItemManager } from './ItemManager';
 import { GameScene } from '../const/enum';
+import i18n from '@root/i18n';
 
 export class GameManager extends Singleton<GameManager>() {
   private _updateInterval: number = -1;
@@ -19,7 +21,7 @@ export class GameManager extends Singleton<GameManager>() {
   private _tick: number = 60;
 
   /** 当前场景模式 */
-  private currentSceneMode: 'readiness' | 'ingame' = 'ingame';
+  private currentSceneMode: 'lobby' | 'readiness' | 'ingame' = 'lobby';
 
   constructor() {
     super();
@@ -62,8 +64,11 @@ export class GameManager extends Singleton<GameManager>() {
     IngameManager.instance.initialize();
     console.log('[GameManager] IngameManager initialized');
 
-    // 如果是 Readiness 场景，也初始化 ReadinessManager
+    // 如果是 Readiness 场景，初始化 ItemManager 和 ReadinessManager
     if (this.currentSceneMode === 'readiness') {
+      ItemManager.instance.initialize();
+      console.log('[GameManager] ItemManager initialized for Readiness scene');
+
       ReadinessManager.instance.initialize();
       console.log(
         '[GameManager] ReadinessManager initialized for Readiness scene'
@@ -75,6 +80,9 @@ export class GameManager extends Singleton<GameManager>() {
 
     // 设置场景查询事件监听
     this.setupSceneQueryListener();
+
+    // 设置语言切换事件监听
+    this.setupLanguageChangeListener();
 
     // 广播当前场景模式给所有客户端
     this.broadcastSceneMode();
@@ -221,12 +229,51 @@ export class GameManager extends Singleton<GameManager>() {
   }
 
   /**
+   * 设置语言切换事件监听器
+   * 监听客户端的语言切换请求并同步服务端的i18n语言
+   */
+  private setupLanguageChangeListener(): void {
+    EventBus.instance.on<{ language: string; _senderEntity?: GameEntity }>(
+      'client:language:change',
+      async (data) => {
+        const language = data?.language;
+        const userId = data?._senderEntity?.player?.userId;
+
+        if (!language) {
+          console.warn('[GameManager] Language change event without language');
+          return;
+        }
+
+        console.log(`[GameManager] Received language change request: ${language} from user ${userId || 'unknown'}`);
+
+        try {
+          // 切换服务端的i18n语言
+          await i18n.changeLanguage(language);
+          console.log(`[GameManager] Server i18n language changed to: ${language}`);
+
+          // 广播语言已切换（可选，用于同步其他需要知道语言的系统）
+          EventBus.instance.emit('server:language:changed', {
+            language,
+            userId,
+          });
+        } catch (error) {
+          console.error('[GameManager] Failed to change server language:', error);
+        }
+      }
+    );
+
+    console.log('[GameManager] Language change listener setup complete');
+  }
+
+  /**
    * 检测并设置当前场景模式
    */
   private detectAndSetSceneMode(): void {
     const currentSceneType = Settings.getCurrentSceneType();
 
-    if (currentSceneType === GameScene.Readiness) {
+    if (currentSceneType === GameScene.Lobby) {
+      this.currentSceneMode = 'lobby';
+    } else if (currentSceneType === GameScene.Readiness) {
       this.currentSceneMode = 'readiness';
     } else {
       this.currentSceneMode = 'ingame';
@@ -253,7 +300,7 @@ export class GameManager extends Singleton<GameManager>() {
   /**
    * 获取当前场景模式
    */
-  public getCurrentSceneMode(): 'readiness' | 'ingame' {
+  public getCurrentSceneMode(): 'lobby' | 'readiness' | 'ingame' {
     return this.currentSceneMode;
   }
 

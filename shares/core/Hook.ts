@@ -7,8 +7,8 @@ import type { Seconds } from './General';
  * ========================= */
 export interface ObjectiveHooks {
   /** 不同环节的局部修正（叠加到 EffectBundle） */
-  onSearch?: EffectBundle;
-  onIncubate?: EffectBundle & { qteBonus?: Ratio }; // QTE 成功窗增益
+  onSearch?: EffectBundle & { premiumSeedChance?: Ratio }; // 优质种子概率加成（植物学家专属）
+  onIncubate?: EffectBundle & { qteBonus?: Ratio; premiumSeedTimeReduction?: Ratio }; // QTE 成功窗增益 + 优质种子时间减免
   onCarve?: EffectBundle;
   onWaxAndWick?: EffectBundle;
   onIgnite?: EffectBundle;

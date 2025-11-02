@@ -3,6 +3,7 @@ import type { PlayerProfileData } from './events';
 import { CharacterRegistry } from '@shares/character/CharacterRegistry';
 import i18n from '@root/i18n';
 import { EventBus } from '../../core/events/EventBus';
+import { Animation } from '../Animation';
 
 /**
  * Profile UI引用
@@ -52,6 +53,15 @@ export class IngameProfilesUI {
   /** 当前场景模式 */
   private sceneMode: 'readiness' | 'ingame' = 'readiness';
 
+  /** Heart UI 元素引用 */
+  private heartContainer: UiImage | null = null;
+  private heartClip: UiBox | null = null;
+  private heartBg: UiImage | null = null;
+  private heart: UiImage | null = null;
+  /** 心跳动画相关 */
+  private heartbeatZone: number = 0; // 0 = 无心跳, 1 = 慢速, 2 = 中速, 3 = 快速
+  private heartbeatStopFn: (() => void) | null = null;
+
   /** 缓存每个 profile 的原始 UiText 元素（用于恢复） */
   private originalTextElements: Map<
     number,
@@ -97,6 +107,9 @@ export class IngameProfilesUI {
     // 清空所有profile
     this.clearAllProfiles();
 
+    // 获取 Heart UI 元素
+    this.initializeHeartUI();
+
     // 设置事件监听器（包括场景模式监听）
     this.setupEventListeners();
 
@@ -118,6 +131,14 @@ export class IngameProfilesUI {
 
     // 应用场景模式到所有 profiles
     this.applySceneModeToAllProfiles();
+    
+    // 更新心形容器的显示状态
+    this.updateHeartContainerVisibility();
+
+    // 如果切换到 ingame 模式，初始化所有 statusFigure 为 Normal 状态
+    if (mode === 'ingame') {
+      this.initializeAllStatusFigures();
+    }
 
     console.log(`[IngameProfilesUI] Scene mode changed to: ${this.sceneMode}`);
   }
@@ -128,6 +149,73 @@ export class IngameProfilesUI {
   private applySceneModeToAllProfiles(): void {
     for (let i = 0; i < this.profiles.length; i++) {
       this.applySceneModeToProfile(i);
+    }
+  }
+
+  /**
+   * 初始化所有 statusFigure 为 Normal 状态（游戏开始时）
+   */
+  private initializeAllStatusFigures(): void {
+    for (let i = 0; i < this.profiles.length; i++) {
+      const profile = this.profiles[i];
+      if (profile && profile.statusFigure && profile.container.visible) {
+        profile.statusFigure.image = 'picture/profileStatusNormal.png';
+      }
+    }
+    console.log('[IngameProfilesUI] Initialized all statusFigures to Normal state');
+  }
+
+  /**
+   * 初始化 Heart UI 元素
+   */
+  private initializeHeartUI(): void {
+    if (!this.uiScreen) {
+      console.warn('[IngameProfilesUI] Cannot initialize heart UI: screen not found');
+      return;
+    }
+
+    try {
+      const topLeftAnchor = this.uiScreen.uiBox_windowTopLeftAnchor;
+      if (!topLeftAnchor || !topLeftAnchor.children) {
+        console.warn('[IngameProfilesUI] windowTopLeftAnchor not found');
+        return;
+      }
+
+      this.heartContainer = topLeftAnchor.children.find(
+        (child) => child.name === 'heartContainer'
+      ) as UiImage;
+
+      if (!this.heartContainer) {
+        console.warn('[IngameProfilesUI] heartContainer not found');
+        return;
+      }
+
+      if (this.heartContainer.children) {
+        this.heartClip = this.heartContainer.children.find(
+          (child) => child.name === 'heartClip'
+        ) as UiBox;
+        this.heartBg = this.heartContainer.children.find(
+          (child) => child.name === 'heartBg'
+        ) as UiImage;
+        this.heart = this.heartClip?.children.find(
+          (child) => child.name === 'heart'
+        ) as UiImage; 
+      }
+
+      if (!this.heartClip || !this.heartBg) {
+        console.warn('[IngameProfilesUI] Heart elements not complete:', {
+          heartClip: !!this.heartClip,
+          heartBg: !!this.heartBg,
+        });
+        return;
+      }
+
+      console.log('[IngameProfilesUI] Heart UI initialized successfully');
+      
+      // 初始化心形容器的可见性（默认根据场景模式隐藏）
+      this.updateHeartContainerVisibility();
+    } catch (error) {
+      console.error('[IngameProfilesUI] Failed to initialize heart UI:', error);
     }
   }
 
@@ -159,7 +247,7 @@ export class IngameProfilesUI {
         profile.statusFigure.visible = false;
       }
     } else {
-      // Ingame 模式：隐藏 avatar，显示 healthBar 和 status 元素（透明）
+      // Ingame 模式：隐藏 avatar，显示 healthBar 和 statusFigure
       if (profile.avatar) {
         profile.avatar.visible = false;
       }
@@ -169,16 +257,20 @@ export class IngameProfilesUI {
       if (profile.healthBar) {
         profile.healthBar.visible = true;
       }
+      // Ingame 模式下初始隐藏 statusCircle（低血量时会动态显示）
       if (profile.statusCircle) {
-        profile.statusCircle.visible = true;
-        // 设置透明度为0（后期可以通过动画显示）
-        (profile.statusCircle as Record<string, number>).alpha = 0;
+        profile.statusCircle.visible = false;
       }
+      // Ingame 模式下 statusFigure 应该显示（用于显示状态效果图标）
       if (profile.statusFigure) {
         profile.statusFigure.visible = true;
-        // 设置透明度为0（后期可以通过动画显示）
-        (profile.statusFigure as Record<string, number>).alpha = 0;
+        console.log(
+          `[IngameProfilesUI] Profile ${slotIndex} statusFigure set to visible (ingame mode in applySceneModeToProfile)`
+        );
       }
+      
+      // 去掉名字前面的对号（"✓ "）
+      this.removeReadyPrefixForProfile(slotIndex);
     }
   }
 
@@ -212,6 +304,59 @@ export class IngameProfilesUI {
           }
         }
       );
+
+      // 监听玩家死亡事件
+      eventBus.on<{ userId: string; countdown: number }>(
+        'player:death',
+        (data) => {
+          if (data?.userId) {
+            console.log(
+              `[IngameProfilesUI] Player ${data.userId} died (倒地状态)`
+            );
+            this.updatePlayerDeathStatus(data.userId, true);
+          }
+        }
+      );
+
+      // 监听玩家复活事件
+      eventBus.on<{ userId: string }>(
+        'player:revived',
+        (data) => {
+          if (data?.userId) {
+            console.log(
+              `[IngameProfilesUI] Player ${data.userId} revived (复活)`
+            );
+            this.updatePlayerDeathStatus(data.userId, false);
+          }
+        }
+      );
+
+      // 监听玩家彻底死亡事件
+      eventBus.on<{ userId: string }>(
+        'player:permanent_death',
+        (data) => {
+          if (data?.userId) {
+            console.log(
+              `[IngameProfilesUI] Player ${data.userId} permanently dead (彻底死亡)`
+            );
+            this.updatePlayerPermanentDeathStatus(data.userId);
+          }
+        }
+      );
+
+      // 监听心跳区间变化事件
+      eventBus.on<{ zone: number }>(
+        'heartbeat:zone:changed',
+        (data) => {
+          if (data && typeof data.zone === 'number') {
+            console.log(
+              `[IngameProfilesUI] 💓 Heartbeat zone changed: ${this.heartbeatZone} -> ${data.zone}`
+            );
+            this.setHeartbeatZone(data.zone);
+          }
+        }
+      );
+
       this.sceneModeListenerSetup = true;
       console.log('[IngameProfilesUI] Scene mode listener setup complete');
     }
@@ -277,11 +422,24 @@ export class IngameProfilesUI {
    * @param userId 用户 ID
    */
   public setCurrentPlayerByUserId(userId: string): void {
+    console.log(
+      `[IngameProfilesUI] Setting current player by userId: ${userId}`
+    );
+    console.log(
+      `[IngameProfilesUI] Current userIdToSlot mapping:`,
+      Array.from(this.userIdToSlot.entries())
+    );
+
     const slotIndex = this.userIdToSlot.get(userId);
     if (slotIndex !== undefined) {
+      console.log(
+        `[IngameProfilesUI] Found slot ${slotIndex} for userId ${userId}, setting as current player`
+      );
       this.setCurrentPlayerSlot(slotIndex);
     } else {
-      console.warn(`[IngameProfilesUI] UserId ${userId} not found in mapping`);
+      console.warn(
+        `[IngameProfilesUI] ⚠️ UserId ${userId} not found in mapping - cannot set current player slot`
+      );
     }
   }
 
@@ -596,6 +754,12 @@ export class IngameProfilesUI {
     // 更新血量条
     this.updateHealthBar(profile, data.currentHP, data.maxHP);
 
+    // 如果是当前玩家，更新 Heart 显示和容器可见性
+    if (slotIndex === this.currentPlayerSlot) {
+      this.updateHeartDisplay(data.currentHP, data.maxHP);
+      this.updateHeartContainerVisibility(); // 更新心形容器显示状态（检查 Overseer）
+    }
+
     // 更新携带物品
     if (profile.carryingItem) {
       if (data.carryingItem) {
@@ -606,23 +770,29 @@ export class IngameProfilesUI {
       }
     }
 
-    // 更新状态效果
-    if (
-      profile.statusFigure &&
-      data.statusEffects &&
-      data.statusEffects.length > 0
-    ) {
-      profile.statusFigure.visible = true;
-      // TODO: 根据状态效果类型显示对应图标
-    } else if (profile.statusFigure) {
-      profile.statusFigure.visible = false;
-    }
-
     // 显示profile
     profile.container.visible = true;
 
-    // 应用场景模式（确保 healthBar/avatar 等元素的显示状态正确）
+    // 先应用场景模式（设置基本的显示状态：healthBar/avatar等）
     this.applySceneModeToProfile(slotIndex);
+
+    // 在 ingame 模式下，statusFigure 应该始终显示
+    if (this.sceneMode === 'ingame' && profile.statusFigure) {
+      profile.statusFigure.visible = true;
+      console.log(
+        `[IngameProfilesUI] Profile ${slotIndex} statusFigure set to visible (ingame mode)`
+      );
+      
+      // 如果有状态效果，记录日志（未来可以根据状态类型显示不同图标）
+      if (data.statusEffects && data.statusEffects.length > 0) {
+        console.log(
+          `[IngameProfilesUI] Profile ${slotIndex} has ${data.statusEffects.length} status effect(s)`
+        );
+        // TODO: 根据状态效果类型显示对应图标
+      }
+    } else if (profile.statusFigure) {
+      profile.statusFigure.visible = false;
+    }
 
     console.log(
       `[IngameProfilesUI] Updated profile ${slotIndex + 1} for ${data.playerName} (${data.currentHP}/${data.maxHP} HP)`
@@ -663,6 +833,107 @@ export class IngameProfilesUI {
     } else {
       if (profile.statusCircle) {
         profile.statusCircle.visible = false;
+      }
+    }
+  }
+
+  /**
+   * 更新 Heart 显示（当前玩家的血量）
+   * @param currentHP 当前血量
+   * @param maxHP 最大血量
+   */
+  private updateHeartDisplay(currentHP: number, maxHP: number): void {
+    if (!this.heartClip || !this.heartContainer) {
+      return;
+    }
+
+    const hpPercent = Math.max(0, Math.min(1, currentHP / maxHP));
+    
+    // 计算 Y scale（百分比），让 heart 从底部开始填充
+    // 当血量减少时，scale.y 减少，offset.y 需要向下移动（增加）
+    const heightScale = hpPercent;
+    const yOffsetScale = 1 - hpPercent;
+    
+    // 修改 heartClip 的 size.scale.y 来控制高度
+    if (this.heartClip.size.scale) {
+      this.heartClip.size.scale.y = heightScale;
+    }
+    
+    // 修改 heartClip 的 position.scale.y 来控制 Y 偏移
+    if (this.heartClip.position.scale) {
+      this.heartClip.position.scale.y = yOffsetScale;
+    }
+
+    console.log(
+      `[IngameProfilesUI] Updated heart display: ${currentHP}/${maxHP} (${(hpPercent * 100).toFixed(1)}%), heightScale: ${heightScale}, yOffsetScale: ${yOffsetScale}`
+    );
+  }
+
+  /**
+   * 更新心形容器的显示状态
+   * 规则：
+   * 1. lobby 和 readiness 场景隐藏
+   * 2. ingame 场景显示，但如果当前玩家是 Overseer 则隐藏
+   */
+  private updateHeartContainerVisibility(): void {
+    if (!this.heartContainer) {
+      console.warn('[IngameProfilesUI] Heart container not found');
+      return;
+    }
+
+    console.log(`[IngameProfilesUI] 🩺 Updating heart container visibility - Scene: ${this.sceneMode}, Current slot: ${this.currentPlayerSlot}`);
+
+    // readiness 场景隐藏心形容器
+    if (this.sceneMode === 'readiness') {
+      this.heartContainer.visible = false;
+      console.log('[IngameProfilesUI] ❌ Heart container hidden (readiness mode)');
+      return;
+    }
+
+    // ingame 场景：检查当前玩家角色
+    if (this.sceneMode === 'ingame') {
+      // 获取当前玩家的角色信息
+      const currentPlayerData = this.cachedPlayerData.get(this.currentPlayerSlot);
+      
+      if (!currentPlayerData) {
+        // 还没有当前玩家数据，先隐藏
+        this.heartContainer.visible = false;
+        console.log(
+          '[IngameProfilesUI] ❌ Heart container hidden (no current player data yet)'
+        );
+        return;
+      }
+
+      console.log(`[IngameProfilesUI]   Current player: userId=${currentPlayerData.userId}, characterId=${currentPlayerData.characterId}`);
+
+      // 获取角色信息
+      const character = CharacterRegistry.getById(currentPlayerData.characterId);
+      
+      if (!character) {
+        // 角色信息未找到，隐藏
+        this.heartContainer.visible = false;
+        console.log(
+          `[IngameProfilesUI] ❌ Heart container hidden (character ${currentPlayerData.characterId} not found in registry)`
+        );
+        return;
+      }
+
+      console.log(`[IngameProfilesUI]   Character: ${character.name} (${character.faction})`);
+
+      // 检查是否为 Overseer
+      if (character.faction === 'Overseer') {
+        this.heartContainer.visible = false;
+        console.log(
+          `[IngameProfilesUI] ❌ Heart container hidden (current player is Overseer: ${character.name})`
+        );
+      } else {
+        this.heartContainer.visible = true;
+        console.log(
+          `[IngameProfilesUI] ✅ Heart container VISIBLE (current player is Survivor: ${character.name})`
+        );
+        console.log(
+          `[IngameProfilesUI] Heart container state: visible=${this.heartContainer.visible}, heartClip visible=${this.heartClip?.visible}, heartBg visible=${this.heartBg?.visible}`
+        );
       }
     }
   }
@@ -813,9 +1084,249 @@ export class IngameProfilesUI {
   }
 
   /**
+   * 移除单个 profile 的准备标记前缀（用于进入 ingame 时）
+   * @param slotIndex profile 槽位索引
+   */
+  private removeReadyPrefixForProfile(slotIndex: number): void {
+    const profile = this.profiles[slotIndex];
+    if (!profile) {
+      return;
+    }
+
+    const readyPrefix = '✓ ';
+
+    // 移除 characterName 的前缀
+    if (profile.characterName) {
+      const currentText = profile.characterName.textContent || '';
+      if (currentText.startsWith(readyPrefix)) {
+        profile.characterName.textContent = currentText.replace(readyPrefix, '');
+      }
+    }
+
+    // 移除 characterNickname 的前缀
+    if (profile.characterNickname) {
+      const currentText = profile.characterNickname.textContent || '';
+      if (currentText.startsWith(readyPrefix)) {
+        profile.characterNickname.textContent = currentText.replace(readyPrefix, '');
+      }
+    }
+  }
+
+  /**
+   * 更新玩家血条（HP变化时）
+   * @param userId 玩家ID
+   * @param currentHP 当前血量
+   * @param maxHP 最大血量
+   */
+  public updatePlayerHP(userId: string, currentHP: number, maxHP: number): void {
+    // 通过 userId 找到对应的 slot
+    const slotIndex = this.userIdToSlot.get(userId);
+    if (slotIndex === undefined) {
+      console.warn(`[IngameProfilesUI] Cannot find slot for userId: ${userId}`);
+      return;
+    }
+
+    const profile = this.profiles[slotIndex];
+    if (!profile || !profile.healthBarClip || !profile.healthBar) {
+      console.warn(`[IngameProfilesUI] Health bar elements not found for slot ${slotIndex}`);
+      return;
+    }
+
+    // 计算血量百分比
+    const hpPercent = Math.max(0, Math.min(1, currentHP / maxHP));
+
+    // 更新顶部血条（竖向剪切，和心形UI使用相同逻辑）
+    const barHeight = profile.healthBar.size.offset.y;
+    const targetHeight = barHeight * hpPercent;
+    
+    // 计算 Y 偏移（让血条从底部开始填充）
+    const yOffset = barHeight - targetHeight;
+    
+    const newClipSize = Vec2.create({ x: profile.healthBarClip.size.offset.x, y: targetHeight });
+    profile.healthBarClip.size.offset.copy(newClipSize);
+    
+    // 调整 healthBarClip 的 Y 位置，让它从底部开始剪切
+    const newClipPosition = Vec2.create({ x: profile.healthBarClip.position.offset.x, y: yOffset });
+    profile.healthBarClip.position.offset.copy(newClipPosition);
+
+    console.log(
+      `[IngameProfilesUI] Updated HP for slot ${slotIndex} (${userId}): ${currentHP}/${maxHP} (${(hpPercent * 100).toFixed(1)}%) - Height: ${targetHeight.toFixed(2)}, Offset: ${yOffset.toFixed(2)}`
+    );
+
+    // 如果这是当前玩家，同时更新心形容器
+    if (slotIndex === this.currentPlayerSlot) {
+      this.updateHeartDisplay(currentHP, maxHP);
+    }
+  }
+
+  /**
+   * 更新玩家携带物品图片
+   * @param userId 玩家ID
+   * @param itemImageUrl 物品图片URL（如果为空则隐藏）
+   */
+  public updatePlayerCarryingItem(userId: string, itemImageUrl: string | null): void {
+    // 通过 userId 找到对应的 slot
+    const slotIndex = this.userIdToSlot.get(userId);
+    if (slotIndex === undefined) {
+      console.warn(`[IngameProfilesUI] Cannot find slot for userId: ${userId}`);
+      return;
+    }
+
+    const profile = this.profiles[slotIndex];
+    if (!profile || !profile.carryingItem) {
+      console.warn(`[IngameProfilesUI] Carrying item element not found for slot ${slotIndex}`);
+      return;
+    }
+
+    if (itemImageUrl) {
+      profile.carryingItem.visible = true;
+      profile.carryingItem.image = itemImageUrl;
+      console.log(
+        `[IngameProfilesUI] Updated carrying item for slot ${slotIndex} (${userId}): ${itemImageUrl}`
+      );
+    } else {
+      profile.carryingItem.visible = false;
+      console.log(
+        `[IngameProfilesUI] Cleared carrying item for slot ${slotIndex} (${userId})`
+      );
+    }
+  }
+
+  /**
+   * 更新玩家死亡状态（倒地/复活）
+   * @param userId 玩家ID
+   * @param isDead 是否倒地
+   */
+  public updatePlayerDeathStatus(userId: string, isDead: boolean): void {
+    // 通过 userId 找到对应的 slot
+    const slotIndex = this.userIdToSlot.get(userId);
+    if (slotIndex === undefined) {
+      console.warn(`[IngameProfilesUI] Cannot find slot for userId: ${userId}`);
+      return;
+    }
+
+    const profile = this.profiles[slotIndex];
+    if (!profile || !profile.statusFigure) {
+      console.warn(`[IngameProfilesUI] statusFigure not found for slot ${slotIndex}`);
+      return;
+    }
+
+    // 更新 statusFigure 图片
+    if (isDead) {
+      profile.statusFigure.image = 'picture/profileStatusLying.png';
+      console.log(
+        `[IngameProfilesUI] Player ${userId} (slot ${slotIndex}) statusFigure changed to Lying (倒地)`
+      );
+    } else {
+      profile.statusFigure.image = 'picture/profileStatusNormal.png';
+      console.log(
+        `[IngameProfilesUI] Player ${userId} (slot ${slotIndex}) statusFigure changed to Normal (正常)`
+      );
+    }
+  }
+
+  /**
+   * 更新玩家彻底死亡状态（变成观察者）
+   * @param userId 玩家ID
+   */
+  public updatePlayerPermanentDeathStatus(userId: string): void {
+    // 通过 userId 找到对应的 slot
+    const slotIndex = this.userIdToSlot.get(userId);
+    if (slotIndex === undefined) {
+      console.warn(`[IngameProfilesUI] Cannot find slot for userId: ${userId}`);
+      return;
+    }
+
+    const profile = this.profiles[slotIndex];
+    if (!profile || !profile.statusFigure) {
+      console.warn(`[IngameProfilesUI] statusFigure not found for slot ${slotIndex}`);
+      return;
+    }
+
+    // 更新 statusFigure 图片为彻底死亡状态
+    profile.statusFigure.image = 'picture/profileStatusDead.png';
+    console.log(
+      `[IngameProfilesUI] Player ${userId} (slot ${slotIndex}) statusFigure changed to Dead (彻底死亡)`
+    );
+  }
+
+  /**
+   * 设置心跳区间
+   * @param zone 0 = 无心跳, 1 = 慢速, 2 = 中速, 3 = 快速
+   */
+  private setHeartbeatZone(zone: number): void {
+    if (this.heartbeatZone === zone) {
+      return; // 区间未变化，无需更新
+    }
+
+    this.heartbeatZone = zone;
+
+    if (zone === 0) {
+      // 停止心跳动画
+      this.stopHeartbeatAnimation();
+    } else {
+      // 开始或更新心跳动画
+      this.startHeartbeatAnimation();
+    }
+  }
+
+  /**
+   * 开始心跳动画
+   */
+  private startHeartbeatAnimation(): void {
+    if (!this.heartContainer) {
+      return;
+    }
+
+    // 如果已有动画在运行，先停止
+    this.stopHeartbeatAnimation();
+
+    // 计算心跳周期（毫秒）
+    let heartbeatPeriod: number;
+    switch (this.heartbeatZone) {
+      case 1: // 慢速心跳 (< 96)
+        heartbeatPeriod = 1200;
+        break;
+      case 2: // 中速心跳 (< 64)
+        heartbeatPeriod = 800;
+        break;
+      case 3: // 快速心跳 (< 32)
+        heartbeatPeriod = 500;
+        break;
+      default:
+        heartbeatPeriod = 1200;
+    }
+
+    // 使用 Animation.startHeartbeat 启动心跳动画
+    this.heartbeatStopFn = Animation.startHeartbeat(
+      this.heart,
+      heartbeatPeriod,
+      0.15 // 15% 缩放幅度
+    );
+
+    console.log(
+      `[IngameProfilesUI] ❤️ Started heartbeat animation (zone ${this.heartbeatZone}, period ${heartbeatPeriod}ms)`
+    );
+  }
+
+  /**
+   * 停止心跳动画
+   */
+  private stopHeartbeatAnimation(): void {
+    if (this.heartbeatStopFn) {
+      this.heartbeatStopFn();
+      this.heartbeatStopFn = null;
+      console.log('[IngameProfilesUI] 🛑 Stopped heartbeat animation');
+    }
+  }
+
+  /**
    * 释放资源
    */
   public dispose(): void {
+    // 停止心跳动画
+    this.stopHeartbeatAnimation();
+
     this.clearAllProfiles();
     this.unlockedCharacters.clear();
     this.profiles = [];

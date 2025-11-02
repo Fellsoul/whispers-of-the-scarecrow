@@ -5,7 +5,7 @@ import type { SurvivorRoleBase } from '../../role/SurvivorRoleBase';
 import { Logger } from '../../../core/utils/Logger';
 import { PlayerController } from './PlayerController';
 import { Faction } from '@shares/core/Enum';
-import type { SebastianMoore, ThomasHawthorne } from '../../role';
+import type { LilianNoble, SebastianMoore, ThomasHawthorne } from '../../role';
 
 const { apclass } = _decorator;
 
@@ -399,16 +399,22 @@ export class RoleController extends Component<GameEntity> {
    */
   private handleHeal(data?: { amount: number }): void {
     if (!this.roleInstance || !this.userId || !data) {
+      Logger.error(`[RoleController] handleHeal failed - roleInstance: ${!!this.roleInstance}, userId: ${this.userId}, data: ${!!data}`);
       return;
     }
 
+    const statusBefore = this.roleInstance.getStatus();
+    Logger.log(`[RoleController] 🏥 Player ${this.userId} heal triggered - Before: ${statusBefore.currentHP}/${statusBefore.maxHP}, Heal amount: ${data.amount}`);
+
     const actualHealed = this.roleInstance.heal(data.amount);
+    const statusAfter = this.roleInstance.getStatus();
+    Logger.log(`[RoleController] 💉 Player ${this.userId} heal executed - After: ${statusAfter.currentHP}/${statusAfter.maxHP}, Actual healed: ${actualHealed}`);
 
     // 同步到CharacterManager
     this.charMgr.modifyHP(this.userId, actualHealed, 'Heal');
 
     Logger.log(
-      `[RoleController] Player ${this.userId} healed ${actualHealed} HP`
+      `[RoleController] ✅ Player ${this.userId} healed ${actualHealed} HP (synced to CharacterManager)`
     );
 
     // 广播治疗事件给客户端
@@ -768,14 +774,14 @@ export class RoleController extends Component<GameEntity> {
       return;
     }
 
-    const lilian = this.roleInstance as Record<string, unknown>;
+    const lilian = this.roleInstance as LilianNoble;
     if (typeof lilian.setNearAltar === 'function') {
       (
         lilian.setNearAltar as (
           playerPos: GameVector3,
           altarPos: GameVector3
         ) => void
-      )(data.playerPosition, data.altarPosition);
+      )(new GameVector3(data.playerPosition.x, data.playerPosition.y, data.playerPosition.z), new GameVector3(data.altarPosition.x, data.altarPosition.y, data.altarPosition.z));
 
       Logger.log(
         `[RoleController] Player ${this.userId} altar position updated`
@@ -846,14 +852,13 @@ export class RoleController extends Component<GameEntity> {
     const voxelAbove = voxels.getVoxel(x, y + 1, z);
 
     //判断如果voxel是脚底
-    if (voxel === 127) {
+    if (y === 8) {
       // 碰撞的是脚底草地，允许翻越
       return;
     }
 
-    //如果该voxel下面不是地面grass
-    const voxelBelow = voxels.getVoxel(x, y - 1, z);
-    if (voxelBelow !== 127) {
+    //如果该voxel
+    if (y !== 9) {
       return;
     }
 

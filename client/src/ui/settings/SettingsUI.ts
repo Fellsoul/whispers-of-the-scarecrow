@@ -4,6 +4,7 @@
 
 import { Animation } from '../Animation';
 import type { UiIndex_screen } from '../../../UiIndex/screens/UiIndex_screen';
+import { CommunicationMgr } from '../../presentation/CommunicationGateway';
 import i18n from '@root/i18n';
 
 export type UiScreenInstance = UiIndex_screen;
@@ -295,6 +296,16 @@ export class SettingsUI {
       console.error('[SettingsUI] Failed to change i18n language:', error);
     }
 
+    // 通知服务端切换语言
+    try {
+      CommunicationMgr.instance.send('server:language:change', {
+        language: i18nLang,
+      });
+      console.log(`[SettingsUI] Sent language change event to server: ${i18nLang}`);
+    } catch (error) {
+      console.error('[SettingsUI] Failed to send language change event to server:', error);
+    }
+
     this.updateLanguageDisplay();
     this.updateTitles(); // 更新标题文本
     console.log('[SettingsUI] Language switched to:', this.currentLanguage);
@@ -339,7 +350,7 @@ export class SettingsUI {
     // 更新语言标题
     const languageTitle = this.uiScreen.uiText_languageTitle;
     if (languageTitle) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       languageTitle.textContent = i18n.t(
         'settings.language_title' as any
       ) as string;

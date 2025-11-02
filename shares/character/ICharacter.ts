@@ -38,6 +38,8 @@ export interface ICharacter {
   defaultUnlocked?: boolean;
   /** Gameplay角色配置ID（关联到BaseRole/SurvivorRole/OverseerRole） */
   gameplayRoleId?: string;
+  /** 玩家皮肤名称 */
+  skinName?: string;
 }
 
 /**
@@ -56,4 +58,5 @@ export interface ICharacterDTO {
   faction: 'Survivor' | 'Overseer';
   defaultUnlocked?: boolean;
   gameplayRoleId?: string;
+  skinName?: string;
 }

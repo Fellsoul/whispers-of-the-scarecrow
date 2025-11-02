@@ -16,6 +16,7 @@ export class Character implements ICharacter {
   faction: 'Survivor' | 'Overseer';
   defaultUnlocked?: boolean;
   gameplayRoleId?: string;
+  skinName?: string;
 
   constructor(data: ICharacterDTO) {
     this.id = data.id;
@@ -30,6 +31,7 @@ export class Character implements ICharacter {
     this.faction = data.faction;
     this.defaultUnlocked = data.defaultUnlocked;
     this.gameplayRoleId = data.gameplayRoleId;
+    this.skinName = data.skinName;
   }
 
   /**
@@ -56,6 +58,7 @@ export class Character implements ICharacter {
       faction: this.faction,
       defaultUnlocked: this.defaultUnlocked,
       gameplayRoleId: this.gameplayRoleId,
+      skinName: this.skinName,
     };
   }
 

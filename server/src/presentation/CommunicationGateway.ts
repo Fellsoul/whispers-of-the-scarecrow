@@ -19,7 +19,6 @@ export class CommunicationMgr extends Singleton<CommunicationMgr>() {
     data: T
   ): void {
     const targetIds = Array.isArray(to) ? to.map((p) => p.id) : to.id;
-    console.log(`[Server SEND] Topic: ${topic}, To: [${targetIds}]`);
     remoteChannel.sendClientEvent(to, { topic, data });
   }
 
@@ -29,7 +28,6 @@ export class CommunicationMgr extends Singleton<CommunicationMgr>() {
    * @param data 消息数据
    */
   sendBroad<T>(topic: string, data: T): void {
-    console.log(`[Server BROADCAST] Topic: ${topic}`);
     remoteChannel.broadcastClientEvent({ topic, data });
   }
 
@@ -40,9 +38,6 @@ export class CommunicationMgr extends Singleton<CommunicationMgr>() {
   private initializeReceiver(): void {
     remoteChannel.onServerEvent((event) => {
       const senderId = event.entity?.player?.userId || 'unknown';
-      console.log(
-        `[Server RECEIVE] Topic: ${event.args.topic}, From: ${senderId}`
-      );
 
       // 在事件数据中注入发送者的实体信息，供组件判断
       const eventData = {

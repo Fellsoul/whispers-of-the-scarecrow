@@ -130,7 +130,7 @@ export class BookService {
   async loadBookMarks(): Promise<BookMarkData> {
     try {
       // 从 i18n 系统获取书签数据
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const bookmarksData = i18n.getResourceBundle(
         i18n.language,
         'book_bookmarks'
@@ -156,7 +156,7 @@ export class BookService {
   async loadConditions(): Promise<ConditionsData> {
     try {
       // 从 i18n 系统获取条件数据
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const conditionsData = i18n.getResourceBundle(
         i18n.language,
         'book_conditions'

@@ -24,6 +24,8 @@ import { ReadinessUI } from '../ui/readiness/ReadinessUI';
 import { CharacterRegistry } from '../../../shares/character/CharacterRegistry';
 import { IngameProfilesUI } from '../ui/ingame/IngameProfilesUI';
 import { IngameProfilesController } from '../ui/ingame/IngameProfilesController_v2';
+import { InventoryUIController } from '../ui/inventory/InventoryUIController';
+import { QteUIController } from '../ui/qte/QteUIController';
 
 /**
  * UiManager 类
@@ -51,6 +53,7 @@ export class UiManager extends Singleton<UiManager>() {
   private windowTopAnchor: UiBox | null = null;
   private windowDownRightAnchor: UiBox | null = null;
   private windowDownAnchor: UiBox | null = null;
+  private windowTopLeftAnchor: UiBox | null = null;
   private communicationMgr: CommunicationMgr;
   private currentScene: string | null = null;
 
@@ -122,6 +125,7 @@ export class UiManager extends Singleton<UiManager>() {
     this.windowTopAnchor = uiScreen?.uiBox_windowTopAnchor as UiBox;
     this.windowDownRightAnchor = uiScreen?.uiBox_windowDownRightAnchor as UiBox;
     this.windowDownAnchor = uiScreen?.uiBox_windowDownAnchor as UiBox;
+    this.windowTopLeftAnchor = uiScreen?.uiBox_windowTopLeftAnchor as UiBox;
 
     // 0. 初始化角色注册表 - 优先加载
     try {
@@ -260,6 +264,38 @@ export class UiManager extends Singleton<UiManager>() {
       }
     }
 
+    //9. 初始化Inventory UI
+    if (uiScreen) {
+      let inventoryController = this.get<InventoryUIController>('inventory');
+      if (!inventoryController) {
+        inventoryController = new InventoryUIController();
+        this.register('inventory', inventoryController);
+      }
+
+      try {
+        inventoryController.initialize(uiScreen as unknown as UiScreenInstance);
+        console.log('[UiManager] Inventory UI initialized');
+      } catch (error) {
+        console.error('[UiManager] Failed to initialize inventory UI:', error);
+      }
+    }
+
+    //10. 初始化QTE UI
+    if (uiScreen) {
+      let qteController = this.get<QteUIController>('qte');
+      if (!qteController) {
+        qteController = new QteUIController();
+        this.register('qte', qteController);
+      }
+
+      try {
+        qteController.initialize(uiScreen as unknown as UiScreenInstance);
+        console.log('[UiManager] QTE UI initialized');
+      } catch (error) {
+        console.error('[UiManager] Failed to initialize QTE UI:', error);
+      }
+    }
+
     this.isInitialized = true;
     console.log('[UiManager] Initialized successfully');
   }
@@ -324,6 +360,11 @@ export class UiManager extends Singleton<UiManager>() {
       if (this.windowDownAnchor) {
         console.log('[UiManager] Scaling windowDownAnchor and its children');
         scaler.scaleUI(this.windowDownAnchor);
+      }
+
+      if (this.windowTopLeftAnchor) {
+        console.log('[UiManager] Scaling windowTopLeftAnchor and its children');
+        scaler.scaleUI(this.windowTopLeftAnchor);
       }
     } catch (error) {
       console.error('[UiManager] Failed to apply UI scaling:', error);
@@ -500,7 +541,7 @@ export class UiManager extends Singleton<UiManager>() {
 
   /**
    * 更新book icon的显示状态
-   * 如果场景是readiness/gameSmall/gameLarge，则隐藏icon
+   * 在 lobby 场景显示 icon，在其他场景隐藏
    */
   private updateBookIconVisibility(): void {
     const bookUI = this.get<BookUI>('book');
@@ -521,6 +562,7 @@ export class UiManager extends Singleton<UiManager>() {
       console.log(
         `[UiManager] Showing book icon for scene: ${this.currentScene}`
       );
+      // 在 lobby 场景显示 icon
       bookUI.setBookIconVisible(true);
     }
   }
@@ -533,6 +575,7 @@ export class UiManager extends Singleton<UiManager>() {
       return false;
     }
 
+    // 只在 lobby 场景显示 icon，其他场景隐藏
     const hideScenes = ['readiness', 'ingame'];
     return hideScenes.includes(this.currentScene);
   }

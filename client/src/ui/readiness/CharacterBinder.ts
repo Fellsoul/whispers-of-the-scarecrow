@@ -105,25 +105,49 @@ export class CharacterBinder {
     // 绑定技能1 - 使用 i18next 获取翻译
     const skill1Title = i18n.t(`character:${character.id}.skill1.title`, '');
     const skill1Desc = i18n.t(`character:${character.id}.skill1.desc`, '');
+    console.log(`[CharacterBinder] Skill1 - Title: "${skill1Title}", Desc: "${skill1Desc}", Icon: "${character.skill1?.icon}"`);
+    console.log(`[CharacterBinder] Skill1 - uiRefs.skill1image exists: ${!!uiRefs.skill1image}, character.skill1 exists: ${!!character.skill1}`);
+    
     if (skill1Title && skill1Desc) {
       if (uiRefs.characterSkill1Intro) {
         uiRefs.characterSkill1Intro.textContent = `${skill1Title}\n${skill1Desc}`;
       }
       if (uiRefs.skill1image && character.skill1?.icon) {
         uiRefs.skill1image.image = character.skill1.icon || PLACEHOLDER.icon;
+        uiRefs.skill1image.visible = true; // 确保图片可见
+        console.log(`[CharacterBinder] ✅ Skill1 image set to: ${character.skill1.icon}, visible: ${uiRefs.skill1image.visible}`);
+      } else {
+        console.warn(`[CharacterBinder] ❌ Skill1 image NOT set - uiRefs.skill1image: ${!!uiRefs.skill1image}, icon: ${character.skill1?.icon}`);
+        if (uiRefs.skill1image) {
+          uiRefs.skill1image.visible = false;
+        }
       }
+    } else {
+      console.warn(`[CharacterBinder] ❌ Skill1 text missing - cannot display skill1`);
     }
 
     // 绑定技能2 - 使用 i18next 获取翻译
     const skill2Title = i18n.t(`character:${character.id}.skill2.title`, '');
     const skill2Desc = i18n.t(`character:${character.id}.skill2.desc`, '');
+    console.log(`[CharacterBinder] Skill2 - Title: "${skill2Title}", Desc: "${skill2Desc}", Icon: "${character.skill2?.icon}"`);
+    console.log(`[CharacterBinder] Skill2 - uiRefs.skill2image exists: ${!!uiRefs.skill2image}, character.skill2 exists: ${!!character.skill2}`);
+    
     if (skill2Title && skill2Desc) {
       if (uiRefs.characterSkill2Intro) {
         uiRefs.characterSkill2Intro.textContent = `${skill2Title}\n${skill2Desc}`;
       }
       if (uiRefs.skill2image && character.skill2?.icon) {
         uiRefs.skill2image.image = character.skill2.icon || PLACEHOLDER.icon;
+        uiRefs.skill2image.visible = true; // 确保图片可见
+        console.log(`[CharacterBinder] ✅ Skill2 image set to: ${character.skill2.icon}, visible: ${uiRefs.skill2image.visible}`);
+      } else {
+        console.warn(`[CharacterBinder] ❌ Skill2 image NOT set - uiRefs.skill2image: ${!!uiRefs.skill2image}, icon: ${character.skill2?.icon}`);
+        if (uiRefs.skill2image) {
+          uiRefs.skill2image.visible = false;
+        }
       }
+    } else {
+      console.warn(`[CharacterBinder] ❌ Skill2 text missing - cannot display skill2`);
     }
 
     // 资源缺失警告

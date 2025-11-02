@@ -1,6 +1,7 @@
 import { _decorator, Component } from '@dao3fun/component';
 import { Logger } from '../../../core/utils/Logger';
 import { CharacterManager } from '../../mgr/CharacterManager';
+import { DeathController } from '../player/DeathController';
 import {
   eulerToQuaternion,
   normalizeQuat,
@@ -54,6 +55,12 @@ export class IronBoard extends Component<GameEntity> {
   /** 互动事件令牌 */
   private interactToken: GameEventHandlerToken | null = null;
 
+  /** Overseer 锁定持续时间（秒） */
+  private readonly OVERSEER_LOCK_DURATION = 3;
+
+  /** 当前触发交互的玩家 */
+  private currentInteractPlayer: GameEntity | null = null;
+
   /**
    * 组件启动
    */
@@ -95,7 +102,6 @@ export class IronBoard extends Component<GameEntity> {
     // 设置互动属性
     entity.enableInteract = true;
     entity.interactRadius = this.INTERACT_RADIUS;
-    entity.interactHint = '按 E 翻板';
     entity.interactColor = new GameRGBColor(0, 1, 0);
 
     // 监听互动事件
@@ -129,8 +135,26 @@ export class IronBoard extends Component<GameEntity> {
       return;
     }
 
+    const userId = player.player?.userId;
+    if (!userId) {
+      return;
+    }
+
+    // 检查玩家是否死亡或濒死
+    if (DeathController.isPlayerDeadOrDying(userId)) {
+      Logger.log(`[IronBoard] ❌ Player ${userId} is dead/dying, cannot interact with board`);
+      return;
+    }
+
+    // 检查玩家角色 - Overseer 不能在翻板阶段操作
+    const characterState = CharacterManager.instance.getCharacterState(userId);
+    if (characterState && characterState.character.faction === 'Overseer') {
+      Logger.log(`[IronBoard] ⛔ Overseer ${userId} cannot interact during rotation phase`);
+      return;
+    }
+
     Logger.log(
-      `[IronBoard] First interact by player ${player.player?.userId || 'unknown'}`
+      `[IronBoard] First interact by player ${userId}`
     );
 
     this.boardState = 'rotating';
@@ -236,6 +260,32 @@ export class IronBoard extends Component<GameEntity> {
     if (this.boardState === 'rotating') {
       this.updateRotation(dt);
     }
+  }
+
+  /**
+   * 销毁板子实体
+   */
+  private destroyBoard(): void {
+    Logger.log(`[IronBoard] Destroying board entity ${this.node.entity.id}`);
+
+    // 清理事件监听
+    if (this.interactToken) {
+      this.interactToken.cancel();
+      this.interactToken = null;
+    }
+
+    if (this.collisionToken) {
+      this.collisionToken.cancel();
+      this.collisionToken = null;
+    }
+
+    // 禁用实体（隐藏并移除碰撞）
+    const entity = this.node.entity;
+    entity.enableInteract = false;
+    entity.collides = false;
+    entity.meshInvisible = true;
+
+    Logger.log(`[IronBoard] Board entity ${entity.id} disabled and hidden`);
   }
 
   /**
@@ -362,7 +412,6 @@ export class IronBoard extends Component<GameEntity> {
     }
 
     // 更新互动提示
-    this.node.entity.interactHint = '按 E 传送';
 
     // 监听互动事件
     this.interactToken = this.node.entity.onInteract((event) => {
@@ -373,46 +422,183 @@ export class IronBoard extends Component<GameEntity> {
   }
 
   /**
-   * 处理第二次互动 - 传送玩家
+   * 处理第二次互动 - 传送玩家（Survivor）或锁定后摧毁（Overseer）
    */
   private handleSecondInteract(player: GameEntity): void {
     if (this.boardState !== 'activated') {
       return;
     }
 
+    const userId = player.player?.userId;
+    if (!userId) {
+      return;
+    }
+
+    // 检查玩家是否死亡或濒死
+    if (DeathController.isPlayerDeadOrDying(userId)) {
+      Logger.log(`[IronBoard] ❌ Player ${userId} is dead/dying, cannot interact with board`);
+      return;
+    }
+
     Logger.log(
-      `[IronBoard] Second interact by player ${player.player?.userId || 'unknown'}`
+      `[IronBoard] Second interact by player ${userId}`
     );
 
-    // 计算传送目标位置（板子另一侧）
+    // 检查玩家角色
+    const characterState = CharacterManager.instance.getCharacterState(userId);
+    if (!characterState) {
+      return;
+    }
+
+    if (characterState.character.faction === 'Overseer') {
+      // Overseer: 锁定3秒后摧毁板子
+      this.handleOverseerInteract(player);
+    } else {
+      // Survivor: 传送到另一侧
+      this.teleportPlayer(player);
+    }
+  }
+
+  /**
+   * 处理 Overseer 互动 - 锁定3秒后摧毁板子
+   */
+  private handleOverseerInteract(player: GameEntity): void {
+    const userId = player.player?.userId || 'unknown';
+    Logger.log(`[IronBoard] 🔒 Overseer ${userId} locked for ${this.OVERSEER_LOCK_DURATION} seconds before destroying board`);
+
+    // 锁定玩家
+    if (player.player) {
+      const originalWalkSpeed = player.player.walkSpeed;
+      const originalRunSpeed = player.player.runSpeed;
+      const originalJumpEnabled = player.player.enableJump;
+
+      player.player.walkSpeed = 0;
+      player.player.runSpeed = 0;
+      player.player.enableJump = false;
+
+      // 3秒后解锁并摧毁板子
+      setTimeout(() => {
+        // 恢复玩家移动
+        if (player.player) {
+          player.player.walkSpeed = originalWalkSpeed;
+          player.player.runSpeed = originalRunSpeed;
+          player.player.enableJump = originalJumpEnabled;
+          Logger.log(`[IronBoard] 🔓 Overseer ${userId} unlocked after ${this.OVERSEER_LOCK_DURATION}s`);
+        }
+
+        // 摧毁板子
+        this.destroyBoard();
+      }, this.OVERSEER_LOCK_DURATION * 1000);
+    }
+  }
+
+  /**
+   * 传送玩家到板子另一侧
+   * 1. 判断玩家在板子的左侧还是右侧（使用原始位置）
+   * 2. 先传送到板子位置
+   * 3. 传送到相反侧
+   */
+  private teleportPlayer(player: GameEntity): void {
+    const userId = player.player?.userId || 'unknown';
     const boardPos = this.node.entity.position;
-    const boardRotation = this.node.entity.meshOrientation;
-
-    // 根据板子旋转方向计算另一侧位置
-    // 假设板子沿x轴旋转，传送到板子正面方向的另一侧
-    // 这里简化处理：传送到板子位置上方，然后向前移动一定距离
-    const teleportDistance = 5; // 传送距离
-
-    // 计算前进方向（基于板子的y轴旋转）
-    const yaw = boardRotation.y * (Math.PI / 180); // 转换为弧度
-    const offsetX = Math.sin(yaw) * teleportDistance;
-    const offsetZ = Math.cos(yaw) * teleportDistance;
-
-    // 目标位置：板子上方 + 向前偏移
-    const targetPosition = {
-      x: boardPos.x + offsetX,
-      y: boardPos.y + 2, // 上方2格
-      z: boardPos.z + offsetZ,
+    
+    // 保存玩家原始位置的副本（不是引用！）
+    const originalPlayerPos = {
+      x: player.position.x,
+      y: player.position.y,
+      z: player.position.z,
     };
 
-    // 传送玩家
+    Logger.log(`[IronBoard] 🚪 Player ${userId} teleporting through board`);
+    Logger.log(`[IronBoard]   Player original pos: (${originalPlayerPos.x.toFixed(2)}, ${originalPlayerPos.y.toFixed(2)}, ${originalPlayerPos.z.toFixed(2)})`);
+    Logger.log(`[IronBoard]   Board pos: (${boardPos.x.toFixed(2)}, ${boardPos.y.toFixed(2)}, ${boardPos.z.toFixed(2)})`);
+
+    // 步骤1：计算玩家在板子的哪一侧（左/右）- 在传送之前计算！
+    // 获取板子的前向量（根据板子的 meshOrientation）
+    const boardQuat = this.node.entity.meshOrientation;
+    
+    // 将四元数转换为前向量（假设板子初始朝向是 Z 轴正方向）
+    // 前向量 = 四元数旋转 (0, 0, 1)
+    const forward = this.rotateVectorByQuaternion(
+      { x: 0, y: 0, z: 1 },
+      [boardQuat.x, boardQuat.y, boardQuat.z, boardQuat.w]
+    );
+
+    // 计算板子的右向量（右向量 = 前向量 × 上向量）
+    // 上向量固定为 (0, 1, 0)
+    const right = {
+      x: forward.z,
+      y: 0,
+      z: -forward.x,
+    };
+
+    // 计算玩家相对于板子的方向向量（使用原始位置）
+    const toPlayer = {
+      x: originalPlayerPos.x - boardPos.x,
+      y: 0, // 忽略 Y 轴
+      z: originalPlayerPos.z - boardPos.z,
+    };
+
+    // 计算点积，判断玩家在左侧还是右侧
+    const dotProduct = toPlayer.x * right.x + toPlayer.z * right.z;
+
+    Logger.log(`[IronBoard]   Board forward: (${forward.x.toFixed(2)}, ${forward.y.toFixed(2)}, ${forward.z.toFixed(2)})`);
+    Logger.log(`[IronBoard]   Board right: (${right.x.toFixed(2)}, ${right.y.toFixed(2)}, ${right.z.toFixed(2)})`);
+    Logger.log(`[IronBoard]   To player vector: (${toPlayer.x.toFixed(2)}, ${toPlayer.z.toFixed(2)})`);
+    Logger.log(`[IronBoard]   Dot product: ${dotProduct.toFixed(2)} (${dotProduct > 0 ? 'RIGHT' : 'LEFT'} side)`);
+
+    // 步骤2：先传送到板子位置
+    player.position.x = boardPos.x;
+    player.position.y = boardPos.y;
+    player.position.z = boardPos.z;
+    Logger.log(`[IronBoard]   → Step 2: Teleported to board position`);
+
+    // 步骤3：传送到相反侧
+    const teleportDistance = 3; // 传送距离（格）
+    const sideMultiplier = dotProduct > 0 ? -1 : 1; // 如果在右侧，传送到左侧；反之亦然
+
+    const targetPosition = {
+      x: boardPos.x + right.x * teleportDistance * sideMultiplier,
+      y: boardPos.y + 1, // 上方1格，避免卡入地面
+      z: boardPos.z + right.z * teleportDistance * sideMultiplier,
+    };
+
+    // 传送玩家到目标位置
     player.position.x = targetPosition.x;
     player.position.y = targetPosition.y;
     player.position.z = targetPosition.z;
 
     Logger.log(
-      `[IronBoard] Teleported player ${player.player?.userId || 'unknown'} to (${targetPosition.x.toFixed(2)}, ${targetPosition.y.toFixed(2)}, ${targetPosition.z.toFixed(2)})`
+      `[IronBoard] ✅ Step 3: Teleported player ${userId} to ${dotProduct > 0 ? 'LEFT' : 'RIGHT'} side: (${targetPosition.x.toFixed(2)}, ${targetPosition.y.toFixed(2)}, ${targetPosition.z.toFixed(2)})`
     );
+  }
+
+  /**
+   * 使用四元数旋转向量
+   */
+  private rotateVectorByQuaternion(
+    v: { x: number; y: number; z: number },
+    q: Quat
+  ): { x: number; y: number; z: number } {
+    // 四元数旋转公式: v' = q * v * q^-1
+    // 简化计算（v 作为纯四元数）
+    const [qx, qy, qz, qw] = q;
+    const vx = v.x;
+    const vy = v.y;
+    const vz = v.z;
+
+    // 计算 q * v
+    const t0 = qw * vx + qy * vz - qz * vy;
+    const t1 = qw * vy + qz * vx - qx * vz;
+    const t2 = qw * vz + qx * vy - qy * vx;
+    const t3 = -qx * vx - qy * vy - qz * vz;
+
+    // 计算 (q * v) * q^-1
+    return {
+      x: t0 * qw - t3 * qx - t1 * qz + t2 * qy,
+      y: t1 * qw - t3 * qy - t2 * qx + t0 * qz,
+      z: t2 * qw - t3 * qz - t0 * qy + t1 * qx,
+    };
   }
 
   /**

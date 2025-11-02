@@ -23,12 +23,16 @@ export class ReadinessService {
   }
 
   /**
-   * 初始化角色列表
+   * 初始化角色列表（仅包含 Survivor 阵营角色）
    */
   initCharacters(characters: Character[]): void {
-    this.characters = characters;
+    // 过滤掉 Overseer 阵营的角色，只保留 Survivor
+    this.characters = characters.filter(
+      (char) => char.faction === 'Survivor'
+    );
+    
     console.log(
-      `[ReadinessService] Initialized ${characters.length} characters`
+      `[ReadinessService] Initialized ${this.characters.length} Survivor characters (${characters.length - this.characters.length} Overseer(s) filtered)`
     );
   }
 

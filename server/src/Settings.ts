@@ -2,15 +2,15 @@ import { GameScene, GameMode } from './gameplay/const/enum';
 
 export const Settings = {
   // 调试模式开关
-  debug: true, // 设置为false将关闭所有console.log输出
+  debug: false, // 设置为false将关闭所有console.log输出，并使用GroupStorage分配角色
 
   // 场景名称配置（用于通过world.url检测当前场景）
-  lobbySceneUrl: new URL('https://view.dao3.fun/e/8ffde7513ba10b5a4614'),
+  lobbySceneUrl: new URL('https://dao3.fun/play/5d9b9b0c1e4908070a22'),
   readinessSmallSceneUrl: new URL(
-    'https://view.dao3.fun/e/4feb0d4d0163cbad5591'
+    'https://dao3.fun/play/36b6ed3cc4d0d4d8e0fc'
   ),
   readinessLargeSceneUrl: new URL(
-    'https://view.dao3.fun/e/your-large-scene-url-here'
+    'https://dao3.fun/play/36b6ed3cc4d0d4d8e0fc'
   ),
 
   currentGameMode: GameMode.Small,
@@ -28,9 +28,17 @@ export const Settings = {
     SurvivorChairStartWith: ['ClassicChair'],
     OverseerChairStartWith: ['chairLuxurious'],
     IronBoardQueryStartsWith: ['IronBoard'], // 铁板机关前缀
+    QteObjectQueryStartsWith: [
+      'StrawHeapInteract', // 干草垛（搜索）
+      'MicroGreenhouse', // 温室（孵化）
+      'carve_table', // 雕刻台（雕刻）
+      'light_table', // 点火台（点火）
+      'waxPot', // 熬蜡炉（熬蜡装芯）
+      'Altar', // 祭台（献祭）
+    ],
   },
   // 匹配池最大玩家数
-  maxPlayerSmall: 1,
+  maxPlayerSmall: 5,
   maxPlayerLarge: 10,
   // 匹配池倒计时时长（ms）
   countdownDurationSmall: 10000,
@@ -77,6 +85,12 @@ export const Settings = {
     { x: 9, y: 8, z: 235 },
   ],
 
+  // 准备模式初始朝向配置（facingDirection）
+  // Survivor 朝向（面向前方，Z轴正方向）
+  readinessSurvivorFacingDir: { x: 1, y: 0, z: -1 },
+  // Overseer 朝向（面向前方，Z轴正方向）
+  readinessOverseerFacingDir: { x: 1, y: 0, z: 1 },
+
   //准备模式的相机设置（怪物）
   readinessMonsterCameraConfig: {
     // 固定相机位置
@@ -104,13 +118,13 @@ export const Settings = {
   readinessCharacterViewPositions: [
     // 对应readyPlayerPositionsSmall/Large中的角色
     { position: { x: 20, y: 11, z: 244 }, target: { x: 18, y: 10, z: 249 } },
-    { position: { x: 16, y: 10, z: 250 }, target: { x: 16, y: 8, z: 248 } },
-    { position: { x: 12, y: 10, z: 250 }, target: { x: 12, y: 8, z: 248 } },
-    { position: { x: 8, y: 10, z: 250 }, target: { x: 8, y: 8, z: 248 } },
-    { position: { x: 21, y: 10, z: 248 }, target: { x: 21, y: 8, z: 246 } },
-    { position: { x: 18, y: 10, z: 250 }, target: { x: 18, y: 8, z: 248 } },
-    { position: { x: 14, y: 10, z: 250 }, target: { x: 14, y: 8, z: 248 } },
-    { position: { x: 10, y: 10, z: 250 }, target: { x: 10, y: 8, z: 248 } },
+    { position: { x: 16, y: 11, z: 244 }, target: { x: 14, y: 10, z: 249 } },
+    { position: { x: 12, y: 11, z: 244 }, target: { x: 10, y: 10, z: 250 } },
+    { position: { x: 8, y: 11, z: 244 }, target: { x: 6, y: 10, z: 250 } },
+    { position: { x: 21, y: 11, z: 246 }, target: { x: 21, y: 10, z: 248 } },
+    { position: { x: 18, y: 11, z: 246 }, target: { x: 18, y: 10, z: 250 } },
+    { position: { x: 14, y: 11, z: 246 }, target: { x: 14, y: 10, z: 250 } },
+    { position: { x: 10, y: 11, z: 246 }, target: { x: 10, y: 10, z: 250 } },
   ],
 
   //怪物视角位置列表
@@ -123,10 +137,10 @@ export const Settings = {
   characterMovementConfig: {
     // Overseer（怪物）移动速度
     overseer: {
-      walkSpeed: 0.55,
-      runSpeed: 0.55,
-      walkAcceleration: 0.07,
-      runAcceleration: 0.07,
+      walkSpeed: 0.6,
+      runSpeed: 0.6,
+      walkAcceleration: 0.2,
+      runAcceleration: 0.2,
       jumpPower: 0.6,
       jumpSpeedFactor: 0.4,
     },
@@ -142,14 +156,29 @@ export const Settings = {
   },
 
   defaultCharacter: 'char_survivor_01',
+  defaultOverseerCharacter: 'char_overseer_01',
 
   // 游戏内出生点配置（16个位置，每局游戏随机选择4/8个）(256, 10, 256)
   ingameSpawnPositions: [
     { x: 188, y: 10, z: 46 },
-    //{ x: 219, y: 10, z: 110 },
-    //{ x: 188, y: 10, z: 174 },
-    //{ x: 219, y: 10, z: 210 },
+    { x: 66, y: 10, z: 179 },
+    { x: 28, y: 10, z: 93 },
+    { x: 96, y: 10, z: 71 },
+    { x: 172, y: 10, z: 106 },
+    { x: 219, y: 10, z: 110 },
+    { x: 188, y: 10, z: 174 },
+    { x: 210, y: 10, z: 213 },
   ],
+
+  // QTE 对象数量限制配置（地图上最多显示的数量）
+  qteObjectLimits: {
+    StrawHeapInteract: 3, // 干草垛（搜索）最多6个
+    MicroGreenhouse: 3, // 温室（孵化）最多3个
+    carve_table: 3, // 雕刻台（雕刻）最多2个
+    light_table: 3, // 点火台（点火）最多2个
+    waxPot: 2, // 熬蜡炉（熬蜡装芯）最多2个
+    Altar: 2, // 祭台最多1个
+  },
 
   // 黑幕过渡时长配置（毫秒）
   transitionConfig: {

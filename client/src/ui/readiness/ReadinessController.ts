@@ -11,6 +11,7 @@ import { Animation } from '../Animation';
 import type { UiRefs } from './types';
 import * as Events from './events';
 import type { UiIndex_screen } from '../../../UiIndex/screens/UiIndex_screen';
+import { UiManager } from '../../mgr/UiManager';
 
 export type UiScreenInstance = UiIndex_screen;
 
@@ -22,6 +23,7 @@ export class ReadinessController {
   private communicationMgr: CommunicationMgr;
   private uiRefs: UiRefs | null = null;
   private isCharacterViewActive: boolean = false; // 是否已进入角色视角
+  private isOverseer: boolean = false; // 当前玩家是否是 Overseer
 
   constructor(service: ReadinessService, eventBus: EventBus) {
     this.service = service;
@@ -67,6 +69,9 @@ export class ReadinessController {
     // 初始状态：隐藏角色展示UI和preparedCount
     this.hideInitialUI();
 
+    // 查询当前场景并根据场景调整 UI 显示
+    this.queryAndAdjustUIByScene();
+
     console.log('[ReadinessController] Initialized successfully');
   }
 
@@ -101,6 +106,23 @@ export class ReadinessController {
     }
 
     console.log('[ReadinessController] Initial UI hidden');
+  }
+
+  /**
+   * 查询当前场景并根据场景调整 UI 显示
+   */
+  private queryAndAdjustUIByScene(): void {
+    const currentScene = UiManager.instance.getCurrentScene();
+    console.log(`[ReadinessController] Current scene on init: ${currentScene}`);
+    
+    if (currentScene) {
+      // 如果已经有场景信息，立即调整 UI
+      this.handleSceneModeChanged(currentScene);
+    } else {
+      // 如果没有场景信息，默认隐藏所有 UI，等待 server:scenemode:changed 事件
+      console.log('[ReadinessController] No scene info yet, waiting for server event');
+      this.hideAllReadinessUI();
+    }
   }
 
   /**
@@ -172,6 +194,16 @@ export class ReadinessController {
    * 订阅网关事件（服务端消息通过EventBus分发）
    */
   private subscribeGatewayEvents(): void {
+    // 监听玩家阵营信息（S->C）
+    this.eventBus.on<{ faction: string; isOverseer: boolean }>(
+      'readiness:player:faction',
+      (data) => {
+        if (data) {
+          this.handleFactionInfo(data);
+        }
+      }
+    );
+
     // 准备快照事件（S->C）
     this.eventBus.on<Events.ReadinessSnapshotPayload>(
       Events.GW_READINESS_SNAPSHOT,
@@ -219,7 +251,66 @@ export class ReadinessController {
       }
     });
 
+    // 监听场景模式变化事件
+    this.eventBus.on<{ sceneMode: string }>('server:scenemode:changed', (data) => {
+      if (data?.sceneMode) {
+        this.handleSceneModeChanged(data.sceneMode);
+      }
+    });
+
     console.log('[ReadinessController] Gateway events subscribed');
+  }
+
+  /**
+   * 处理场景模式变化
+   * @param sceneMode 场景模式
+   */
+  private handleSceneModeChanged(sceneMode: string): void {
+    console.log(`[ReadinessController] Scene mode changed to: ${sceneMode}`);
+
+    if (sceneMode === 'lobby' || sceneMode === 'ingame') {
+      // lobby 和 ingame 场景：隐藏所有 Readiness UI
+      console.log(`[ReadinessController] Hiding Readiness UI (${sceneMode} scene)`);
+      this.hideAllReadinessUI();
+    } else if (sceneMode === 'readiness') {
+      // readiness 场景：显示按钮，但角色预览保持隐藏直到用户点击
+      console.log(`[ReadinessController] Showing Readiness buttons (${sceneMode} scene)`);
+      this.showReadinessButtons();
+    }
+  }
+
+  /**
+   * 隐藏所有 Readiness UI 元素
+   */
+  private hideAllReadinessUI(): void {
+    if (this.uiRefs?.rootMiddle) {
+      this.uiRefs.rootMiddle.visible = false;
+    }
+    if (this.uiRefs?.rootDown) {
+      this.uiRefs.rootDown.visible = false;
+    }
+    if (this.uiRefs?.rootDownRight) {
+      this.uiRefs.rootDownRight.visible = false;
+    }
+  }
+
+  /**
+   * 显示 Readiness 按钮（在 readiness 场景中）
+   */
+  private showReadinessButtons(): void {
+    // 显示右下角的按钮区域
+    if (this.uiRefs?.rootDownRight) {
+      this.uiRefs.rootDownRight.visible = true;
+      console.log('[ReadinessController] Showed rootDownRight (buttons)');
+    }
+    
+    // 角色预览区域保持隐藏，等待用户点击切换角色按钮
+    if (this.uiRefs?.rootMiddle) {
+      this.uiRefs.rootMiddle.visible = false;
+    }
+    if (this.uiRefs?.rootDown) {
+      this.uiRefs.rootDown.visible = false;
+    }
   }
 
   /**
@@ -260,22 +351,6 @@ export class ReadinessController {
   }
 
   /**
-   * 隐藏所有Readiness UI元素
-   */
-  private hideAllReadinessUI(): void {
-    if (this.uiRefs?.rootMiddle) {
-      this.uiRefs.rootMiddle.visible = false;
-    }
-    if (this.uiRefs?.rootDown) {
-      this.uiRefs.rootDown.visible = false;
-    }
-    if (this.uiRefs?.rootDownRight) {
-      this.uiRefs.rootDownRight.visible = false;
-    }
-    console.log('[ReadinessController] All Readiness UI hidden');
-  }
-
-  /**
    * 处理镜头切换完成（显示UI）
    */
   private handleCameraComplete(data: Events.CameraCompletePayload): void {
@@ -311,9 +386,9 @@ export class ReadinessController {
       this.uiRefs.preparedCountBox.visible = false;
     }
 
-    // 重新显示切换角色按钮
+    // 重新显示切换角色按钮（Overseer 不显示）
     if (this.uiRefs?.switchCharacter) {
-      this.uiRefs.switchCharacter.visible = true;
+      this.uiRefs.switchCharacter.visible = !this.isOverseer;
     }
 
     // 如果之前已确认，取消确认状态
@@ -366,6 +441,11 @@ export class ReadinessController {
    * 处理向下滚动（下一个角色）
    */
   private handleScrollNext(): void {
+    // Overseer 不允许滚动切换角色
+    if (this.isOverseer) {
+      return;
+    }
+
     if (
       this.service.isLocked() ||
       !this.animator ||
@@ -384,6 +464,11 @@ export class ReadinessController {
    * 处理向上滚动（上一个角色）
    */
   private handleScrollPrev(): void {
+    // Overseer 不允许滚动切换角色
+    if (this.isOverseer) {
+      return;
+    }
+
     if (
       this.service.isLocked() ||
       !this.animator ||
@@ -481,6 +566,12 @@ export class ReadinessController {
    * 处理切换角色（请求服务端切换镜头到玩家对应的角色位置）
    */
   private handleSwitchCharacter(): void {
+    // Overseer 不允许切换角色
+    if (this.isOverseer) {
+      console.log('[ReadinessController] Overseer cannot switch character');
+      return;
+    }
+
     if (this.service.isLocked() || this.service.isReady()) {
       return;
     }
@@ -523,6 +614,37 @@ export class ReadinessController {
     this.service.leaveScrollView();
     this.updateButtonVisibility();
     console.log('[ReadinessController] Left scroll view');
+  }
+
+  /**
+   * 处理玩家阵营信息
+   * @param data 阵营信息
+   */
+  private handleFactionInfo(data: { faction: string; isOverseer: boolean }): void {
+    console.log('[ReadinessController] Received faction info:', data);
+    
+    this.isOverseer = data.isOverseer;
+    
+    // 如果是 Overseer，隐藏"切换角色"按钮
+    if (this.isOverseer) {
+      if (this.uiRefs?.switchCharacter) {
+        this.uiRefs.switchCharacter.visible = false;
+        console.log('[ReadinessController] Hide switch character button for Overseer');
+      }
+      
+      // 如果是 Overseer，也可以隐藏上下翻页按钮（因为不需要切换角色）
+      if (this.uiRefs?.turnUpScrollButton) {
+        this.uiRefs.turnUpScrollButton.visible = false;
+      }
+      if (this.uiRefs?.turnDownScrollButton) {
+        this.uiRefs.turnDownScrollButton.visible = false;
+      }
+      
+      console.log('[ReadinessController] Overseer UI adjustments applied');
+    } else {
+      // Survivor 保持原有按钮显示
+      console.log('[ReadinessController] Survivor UI - all buttons visible');
+    }
   }
 
   /**
@@ -592,7 +714,8 @@ export class ReadinessController {
         this.uiRefs.confirmSelection.visible = true;
       }
       if (this.uiRefs?.switchCharacter) {
-        this.uiRefs.switchCharacter.visible = true;
+        // Overseer 不显示切换角色按钮
+        this.uiRefs.switchCharacter.visible = !this.isOverseer;
       }
       if (this.uiRefs?.cancelConfirmation) {
         this.uiRefs.cancelConfirmation.visible = false;

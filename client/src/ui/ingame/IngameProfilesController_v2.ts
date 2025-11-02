@@ -2,6 +2,7 @@ import { EventBus } from '../../core/events/EventBus';
 import { CommunicationMgr } from '../../presentation/CommunicationGateway';
 import { IngameProfilesUI } from './IngameProfilesUI';
 import { IngameProfilesService } from './IngameProfilesService';
+import { CharacterRegistry } from '@shares/character/CharacterRegistry';
 import type { PlayerProfileData } from './events';
 import {
   INGAME_PROFILE_UPDATE,
@@ -114,6 +115,39 @@ export class IngameProfilesController {
       }
     );
 
+    // 监听玩家血量变化
+    this.eventBus.on<{ userId: string; currentHP: number; maxHP: number }>(
+      'ingame:hp:update',
+      (data) => {
+        if (data) {
+          this.handleHPUpdate(data.userId, data.currentHP, data.maxHP);
+        }
+      }
+    );
+
+    // 监听玩家携带物品变化
+    this.eventBus.on<{ userId: string; itemImageUrl: string | null }>(
+      'ingame:item:update',
+      (data) => {
+        if (data) {
+          this.handleItemUpdate(data.userId, data.itemImageUrl);
+        }
+      }
+    );
+
+    // 监听服务端发送的当前玩家 userId
+    this.eventBus.on<{ userId: string }>(
+      'client:userId:set',
+      (data) => {
+        if (data && data.userId) {
+          console.log(
+            `[IngameProfilesController] Received current userId from server: ${data.userId}`
+          );
+          this.ui.setCurrentPlayerByUserId(data.userId);
+        }
+      }
+    );
+
     console.log('[IngameProfilesController] Events subscribed');
   }
 
@@ -122,6 +156,19 @@ export class IngameProfilesController {
    * @param data 玩家数据
    */
   private handleProfileUpdate(data: PlayerProfileData): void {
+    // 检查是否为 Overseer 角色，如果是则不显示
+    const character = CharacterRegistry.getById(data.characterId);
+    console.log(
+      `[IngameProfilesController] Checking player ${data.userId} (${data.playerName}): characterId=${data.characterId}, character=${character ? character.name : 'NOT_FOUND'}, faction=${character ? character.faction : 'UNKNOWN'}`
+    );
+    
+    if (character && character.faction === 'Overseer') {
+      console.log(
+        `[IngameProfilesController] ⛔ Skipping profile update for Overseer ${data.userId} (${data.playerName})`
+      );
+      return;
+    }
+
     // 1. 更新Service数据
     const slotIndex = this.service.updatePlayerData(data);
 
@@ -153,11 +200,31 @@ export class IngameProfilesController {
       `[IngameProfilesController] Handling batch update of ${dataArray.length} players`
     );
 
+    // 过滤掉 Overseer 角色
+    const filteredData = dataArray.filter((data) => {
+      const character = CharacterRegistry.getById(data.characterId);
+      console.log(
+        `[IngameProfilesController] Batch checking player ${data.userId} (${data.playerName}): characterId=${data.characterId}, character=${character ? character.name : 'NOT_FOUND'}, faction=${character ? character.faction : 'UNKNOWN'}`
+      );
+      
+      if (character && character.faction === 'Overseer') {
+        console.log(
+          `[IngameProfilesController] ⛔ Filtering out Overseer ${data.userId} (${data.playerName}) from batch update`
+        );
+        return false;
+      }
+      return true;
+    });
+
+    console.log(
+      `[IngameProfilesController] After filtering: ${filteredData.length} players (${dataArray.length - filteredData.length} Overseer(s) filtered)`
+    );
+
     // 批量更新Service
-    this.service.updateBatch(dataArray);
+    this.service.updateBatch(filteredData);
 
     // 逐个更新UI
-    dataArray.forEach((data) => {
+    filteredData.forEach((data) => {
       const slotIndex = this.service.getPlayerSlot(data.userId);
       if (slotIndex !== -1) {
         this.ui.updateProfile(slotIndex, data);
@@ -229,9 +296,15 @@ export class IngameProfilesController {
   public updateUnlockedCharacters(unlockedCharacters: string[]): void {
     this.ui.updateUnlockedCharacters(unlockedCharacters);
 
-    // 重新渲染所有profile
+    // 重新渲染所有profile（过滤掉 Overseer）
     const allData = this.service.getAllPlayerData();
     allData.forEach((data) => {
+      // 检查是否为 Overseer
+      const character = CharacterRegistry.getById(data.characterId);
+      if (character && character.faction === 'Overseer') {
+        return; // 跳过 Overseer
+      }
+
       const slotIndex = this.service.getPlayerSlot(data.userId);
       if (slotIndex !== -1) {
         this.ui.updateProfile(slotIndex, data);
@@ -280,6 +353,31 @@ export class IngameProfilesController {
     this.service.clear();
     this.ui.clearAllProfiles();
     console.log('[IngameProfilesController] Cleared all profiles');
+  }
+
+  /**
+   * 处理玩家血量更新
+   * @param userId 玩家ID
+   * @param currentHP 当前血量
+   * @param maxHP 最大血量
+   */
+  private handleHPUpdate(userId: string, currentHP: number, maxHP: number): void {
+    console.log(
+      `[IngameProfilesController] HP update for ${userId}: ${currentHP}/${maxHP}`
+    );
+    this.ui.updatePlayerHP(userId, currentHP, maxHP);
+  }
+
+  /**
+   * 处理玩家携带物品更新
+   * @param userId 玩家ID
+   * @param itemImageUrl 物品图片URL
+   */
+  private handleItemUpdate(userId: string, itemImageUrl: string | null): void {
+    console.log(
+      `[IngameProfilesController] Item update for ${userId}: ${itemImageUrl || 'none'}`
+    );
+    this.ui.updatePlayerCarryingItem(userId, itemImageUrl);
   }
 
   /**
