@@ -1,0 +1,66 @@
+{
+  "locale": "en-US",
+  "version": 1,
+  "bookMarks": [
+    {
+      "id": "bm_welcome",
+      "label": "Welcome",
+      "pageNumberLeft": 0,
+      "pageNumberRight": 7
+    },
+    {
+      "id": "bm_origin",
+      "label": "Before You Play",
+      "pageNumberLeft": 101,
+      "pageNumberRight": 104
+    },
+    {
+      "id": "bm_story_intro",
+      "label": "World",
+      "pageNumberLeft": 201,
+      "pageNumberRight": 204
+    },
+    {
+      "id": "bm_story_main",
+      "label": "Theatre",
+      "pageNumberLeft": 301,
+      "pageNumberRight": 303
+    },
+    {
+      "id": "bm_characters",
+      "label": "How to Survive?",
+      "pageNumberLeft": 401,
+      "pageNumberRight": 405
+    },
+    {
+      "id": "bm_skills",
+      "label": "How to Endure?",
+      "pageNumberLeft": 501,
+      "pageNumberRight": 506
+    },
+    {
+      "id": "bm_bestiarum",
+      "label": "EX · Compendium",
+      "pageNumberLeft": 601,
+      "pageNumberRight": 604
+    },
+    {
+      "id": "bm_rituals",
+      "label": "Outlook",
+      "pageNumberLeft": 701,
+      "pageNumberRight": 702
+    },
+    {
+      "id": "bm_items",
+      "label": "Credits",
+      "pageNumberLeft": 801,
+      "pageNumberRight": 810
+    },
+    {
+      "id": "bm_settings",
+      "label": "Festivals",
+      "pageNumberLeft": 901,
+      "pageNumberRight": 910
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "char_survivor_01": {
+    "name": "Emily Greenwood",
+    "nickname": "Child of the Botanist",
+    "intro": "Daughter of a renowned botanist, raised in her father's greenhouse. She knows plant cycles and traits by heart and can easily pick the finest pumpkin seeds.",
+    "specialSkillTitle": "Naturalist",
+    "skill1": {
+      "title": "Green Thumb",
+      "desc": "Seed find chance +30%; found seeds are higher quality; growth time −20%."
+    },
+    "skill2": {
+      "title": "Nature Affinity",
+      "desc": "When planting pumpkins in the greenhouse, the chance to trigger a Focus Check is reduced by 30%."
+    }
+  },
+  "char_survivor_02": {
+    "name": "Thomas Hawthorne",
+    "nickname": "Child of the Forest Explorer",
+    "intro": "Son of a famed forest explorer. He inherited sharp senses for terrain and hidden clues, and rarely loses his way in the woods.",
+    "specialSkillTitle": "Forest Guide",
+    "skill1": {
+      "title": "Eagle Eye",
+      "desc": "Map vision radius +30%, and enemies within heartbeat range are highlighted on the map."
+    },
+    "skill2": {
+      "title": "Tracker",
+      "desc": "While tracking a jack-o’-lantern carrier or a monster, movement speed +15% and movement noise is reduced."
+    }
+  },
+  "char_survivor_03": {
+    "name": "Lillian Noble",
+    "nickname": "Child of the Classical Scholar",
+    "intro": "Daughter of an antiquities scholar; she studies ancient rites and symbols. Lillian can read old altars and speed up their charging.",
+    "specialSkillTitle": "Wait—Ancient Runes?",
+    "skill1": {
+      "title": "Antiquarian",
+      "desc": "Altar charging speed +25%. After a successful Focus Check, 6% chance to trigger an Ancient Blessing that instantly completes the interaction."
+    },
+    "skill2": {
+      "title": "Echoes of the Ancients",
+      "desc": "Near an altar, map vision radius +20% and enemies within sight are highlighted."
+    }
+  },
+  "char_survivor_04": {
+    "name": "Sebastian Mohr",
+    "nickname": "Child of the Monster Scholar",
+    "intro": "Son of a monster researcher. He understands monster patterns and weaknesses and can use special devices to buy precious time for teammates.",
+    "specialSkillTitle": "I’m Not Afraid of You!",
+    "skill1": {
+      "title": "Conditioned Reflex",
+      "desc": "When attacked by a monster, 20% chance to dodge. If the dodge fails, gain +20% movement speed for 10 seconds."
+    },
+    "skill2": {
+      "title": "Potion Master",
+      "desc": "Every 100 seconds, automatically drinks the next homemade elixir, cleansing all negative buffs."
+    }
+  },
+  "char_overseer_01": {
+    "name": "Scarecrow",
+    "nickname": "Overseer",
+    "intro": "An uncanny scarecrow that guards secrets in the dark and feeds on fear.",
+    "specialSkillTitle": "Harvest of Fear",
+    "skill1": {
+      "title": "Terror Gaze",
+      "desc": "Gazing at a target reduces their movement speed by 30% for 5 seconds."
+    },
+    "skill2": {
+      "title": "Straw Rebirth",
+      "desc": "Upon taking fatal damage, leaves a straw decoy at the spot and teleports to safety."
+    }
+  }
+}

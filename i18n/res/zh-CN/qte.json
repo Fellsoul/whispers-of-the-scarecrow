@@ -1,0 +1,39 @@
+{
+  "hint": {
+    "place_items": "放置物品 (需要: {{items}})",
+    "interact": "互动",
+    "cooldown": "冷却中...",
+    "used": "已使用",
+    "search": "搜索",
+    "rescue": "救援队友"
+  },
+  "message": {
+    "cooldown": "请稍后再试",
+    "used": "该物品已被使用",
+    "missing_items": "缺少所需物品"
+  },
+  "strawHeap": {
+    "name": "干草垛",
+    "hint": "搜索干草垛"
+  },
+  "greenhouse": {
+    "name": "微型温室",
+    "hint": "催生南瓜"
+  },
+  "carveTable": {
+    "name": "雕刻台",
+    "hint": "雕刻南瓜"
+  },
+  "lightTable": {
+    "name": "点灯台",
+    "hint": "点南瓜灯"
+  },
+  "waxPot": {
+    "name": "蜡锅",
+    "hint": "熬蜡"
+  },
+  "altar": {
+    "name": "神秘祭台",
+    "hint": "献祭"
+  }
+}

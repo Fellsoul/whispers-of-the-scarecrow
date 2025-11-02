@@ -1,0 +1,14 @@
+{
+  "settings": {
+    "title": "设置",
+    "language_title": "语言"
+  },
+  "matchpool": {
+    "countdown": "后开始"
+  },
+  "book_cover": {
+    "name": "幽冥启示录",
+    "subtitle": "从 入 门 到 入 土",
+    "intro": "若你听见麦田里有布条抖动，切记，那不是风在说话"
+  }
+}

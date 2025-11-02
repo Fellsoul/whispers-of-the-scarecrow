@@ -1,0 +1,14 @@
+{
+  "settings": {
+    "title": "Settings",
+    "language_title": "Language"
+  },
+  "matchpool": {
+    "countdown": "to start"
+  },
+  "book_cover": {
+    "name": "The Netherworld Revelation",
+    "subtitle": "From Beginner to Buried",
+    "intro": "\"If you hear cloth rustling in the wheat field\nRemember, it's not the wind speaking\""
+  }
+}

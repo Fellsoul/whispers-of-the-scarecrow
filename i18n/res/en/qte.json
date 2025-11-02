@@ -1,0 +1,39 @@
+{
+  "hint": {
+    "place_items": "Place Items (Required: {{items}})",
+    "interact": "Interact",
+    "cooldown": "On Cooldown...",
+    "used": "Already Used",
+    "search": "Search",
+    "rescue": "Rescue Teammate"
+  },
+  "message": {
+    "cooldown": "Please try again later",
+    "used": "This item has been used",
+    "missing_items": "Missing required items"
+  },
+  "strawHeap": {
+    "name": "Straw Heap",
+    "hint": "Search Straw Heap"
+  },
+  "greenhouse": {
+    "name": "Micro Greenhouse",
+    "hint": "Cultivate Pumpkin"
+  },
+  "carveTable": {
+    "name": "Carving Table",
+    "hint": "Carve Pumpkin"
+  },
+  "lightTable": {
+    "name": "Lighting Table",
+    "hint": "Light Pumpkin Lantern"
+  },
+  "waxPot": {
+    "name": "Wax Pot",
+    "hint": "Boil Wax"
+  },
+  "altar": {
+    "name": "Mysterious Altar",
+    "hint": "Sacrifice"
+  }
+}

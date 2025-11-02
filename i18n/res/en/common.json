@@ -1,0 +1,9 @@
+{
+  "altar": {
+    "progress": "{{count}} of the three shadows have been illuminated by pumpkin lanterns",
+    "victory": "Light has banished the darkness! The survivors have completed the ritual!",
+    "defeat": "Darkness has enveloped the land... The Scarecrow has won."
+  }
+}
+
+

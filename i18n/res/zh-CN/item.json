@@ -1,0 +1,50 @@
+{
+  "pickup_hint": "拾取 {{itemName}}",
+  "inventory_full": "你的背包已满！",
+  "picked_up": "拾取了 {{itemName}}",
+  "dropped": "丢弃了 {{itemName}}",
+  "overseer_cannot_pickup": "稻草人无法拾取物品！",
+  "pumpkin_seed": {
+    "name": "南瓜种子",
+    "description": "可以种出南瓜的种子。"
+  },
+  "raw_pumpkin": {
+    "name": "生南瓜",
+    "description": "刚从孵化器中取出的南瓜。"
+  },
+  "carved_pumpkin": {
+    "name": "雕刻好的南瓜",
+    "description": "已经雕刻成南瓜灯的南瓜。"
+  },
+  "candle": {
+    "name": "蜡烛",
+    "description": "用蜡和棉线制成的蜡烛。"
+  },
+  "pumpkin_lantern": {
+    "name": "南瓜灯",
+    "description": "点燃的南瓜灯，可以照亮黑暗。"
+  },
+  "wax": {
+    "name": "蜡",
+    "description": "用于制作蜡烛。"
+  },
+  "cotton_thread": {
+    "name": "棉线",
+    "description": "柔软且耐用的线。"
+  },
+  "healing_potion": {
+    "name": "治疗药水",
+    "description": "恢复 50 HP。"
+  },
+  "speed_boost": {
+    "name": "速度提升",
+    "description": "暂时提升移动速度。"
+  },
+  "lantern": {
+    "name": "提灯",
+    "description": "照亮黑暗的地方。"
+  }
+}
+
+
+

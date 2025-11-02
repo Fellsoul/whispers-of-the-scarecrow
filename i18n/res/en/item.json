@@ -1,0 +1,50 @@
+{
+  "pickup_hint": "Pick up {{itemName}}",
+  "inventory_full": "Your inventory is full!",
+  "picked_up": "Picked up {{itemName}}",
+  "dropped": "Dropped {{itemName}}",
+  "overseer_cannot_pickup": "The Scarecrow cannot pick up items!",
+  "pumpkin_seed": {
+    "name": "Pumpkin Seed",
+    "description": "A seed that can grow into a pumpkin."
+  },
+  "raw_pumpkin": {
+    "name": "Raw Pumpkin",
+    "description": "A pumpkin freshly taken from the incubator."
+  },
+  "carved_pumpkin": {
+    "name": "Carved Pumpkin",
+    "description": "A pumpkin that has been carved into a jack-o'-lantern."
+  },
+  "candle": {
+    "name": "Candle",
+    "description": "A candle made from wax and cotton thread."
+  },
+  "pumpkin_lantern": {
+    "name": "Pumpkin Lantern",
+    "description": "A lit pumpkin lantern that illuminates the darkness."
+  },
+  "wax": {
+    "name": "Wax",
+    "description": "Used for making candles."
+  },
+  "cotton_thread": {
+    "name": "Cotton Thread",
+    "description": "Soft and durable thread."
+  },
+  "healing_potion": {
+    "name": "Healing Potion",
+    "description": "Restores 50 HP."
+  },
+  "speed_boost": {
+    "name": "Speed Boost",
+    "description": "Temporarily increases movement speed."
+  },
+  "lantern": {
+    "name": "Lantern",
+    "description": "Illuminates dark places."
+  }
+}
+
+
+
